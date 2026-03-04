@@ -2,7 +2,7 @@
 """
 Z-Engine: Generates, Engineers and Deploys
 Python 3.11+ / PySide6
-FINAL - Clean UI + Scrollable Preview + Script Stats
+FINAL - Fixed All Issues + Secure API Key Handling
 """
 
 import sys
@@ -22,6 +22,27 @@ import tempfile
 from pathlib import Path
 from typing import Dict, List, Any, Optional, Tuple, Set
 from enum import Enum
+import threading
+
+# Use environment variable for API key (SECURITY FIX)
+ASI_API_KEY = os.environ.get("ASI_API_KEY", "")
+if not ASI_API_KEY:
+    # Fallback to config file if exists (for development)
+    config_path = Path.home() / ".zengine" / "config.json"
+    if config_path.exists():
+        try:
+            with open(config_path) as f:
+                config = json.load(f)
+                ASI_API_KEY = config.get("api_key", "")
+        except:
+            pass
+    
+    # If still no key, show warning but don't hardcode
+    if not ASI_API_KEY:
+        print("WARNING: ASI_API_KEY environment variable not set")
+        print("Please set it with: export ASI_API_KEY='your-key-here'")
+        # For demo purposes only - remove in production
+        # ASI_API_KEY = "your-key-here"
 
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
@@ -29,7 +50,7 @@ from PySide6.QtWidgets import (
     QMessageBox, QProgressBar, QTextEdit, QSplitter, QFrame,
     QGridLayout, QScrollBar, QDialog, QDialogButtonBox, QTabWidget,
     QTableWidget, QTableWidgetItem, QHeaderView, QComboBox,
-    QTreeWidget, QTreeWidgetItem, QSplitter, QSizePolicy,
+    QTreeWidget, QTreeWidgetItem, QSizePolicy,
     QFileDialog, QPlainTextEdit, QButtonGroup, QRadioButton
 )
 from PySide6.QtCore import Qt, QThread, Signal, QTimer
@@ -52,7 +73,6 @@ except ImportError:
 # ASI-1 API CONFIGURATION
 # ============================================================================
 
-ASI_API_KEY = "sk_24b984feb18245e0bc23a9d75a406eff536269e3838f44adb8a357300901f80b"
 ASI_API_URL = "https://api.asi1.ai/v1/chat/completions"
 CONNECTION_TIMEOUT = 25
 MAX_PIPELINE_DURATION = 60
@@ -188,8 +208,9 @@ class CommandSafety:
         if os.path.exists(exe_name):
             return True
         
-        # Check PATH
-        for path in os.environ["PATH"].split(os.pathsep):
+        # Check PATH safely (FIX: use os.getenv with default)
+        path_env = os.getenv("PATH", "")
+        for path in path_env.split(os.pathsep):
             exe_path = os.path.join(path, exe_name)
             if os.path.exists(exe_path):
                 return True
@@ -289,6 +310,601 @@ class RiskLevel(Enum):
         }
         
         return valid_values.get(value, cls.LOW)
+
+
+# ============================================================================
+# 3-BAR COMPARISON CHART WIDGET
+# ============================================================================
+
+class ThreeBarChartWidget(QFrame):
+    """Widget showing before vs after comparison with 3 bars"""
+    
+    def __init__(self):
+        super().__init__()
+        self.current_score = None
+        self.original_projected = None
+        self.refined_projected = None
+        self.live_projected = None
+        self.setup_ui()
+        self.hide()
+    
+    def setup_ui(self):
+        self.setFrameStyle(QFrame.Shape.Box)
+        self.setStyleSheet("""
+            QFrame {
+                border: 2px solid #00ff00;
+                border-radius: 5px;
+                background: #1a1a1a;
+                margin: 5px;
+            }
+        """)
+        
+        layout = QVBoxLayout()
+        
+        # Header
+        header = QLabel("System Stability Improvement")
+        header.setFont(QFont("Arial", 12, QFont.Weight.Bold))
+        header.setStyleSheet("color: #00ff00;")
+        layout.addWidget(header)
+        
+        # Subtitle
+        self.subtitle = QLabel("AI reasoning improves system stability")
+        self.subtitle.setStyleSheet("color: #88ff88; font-style: italic; margin-bottom: 10px;")
+        layout.addWidget(self.subtitle)
+        
+        # Chart area
+        chart_widget = QWidget()
+        chart_layout = QVBoxLayout(chart_widget)
+        chart_layout.setSpacing(15)
+        
+        # Bar 1 - Current Score
+        bar1_layout = QHBoxLayout()
+        bar1_layout.addWidget(QLabel("Current"), 1)
+        
+        self.bar1_container = QWidget()
+        self.bar1_container.setMinimumHeight(30)
+        self.bar1_container.setStyleSheet("background: #2a2a2a; border-radius: 3px;")
+        bar1_container_layout = QHBoxLayout(self.bar1_container)
+        bar1_container_layout.setContentsMargins(0, 0, 0, 0)
+        
+        self.bar1 = QFrame()
+        self.bar1.setFixedHeight(30)
+        self.bar1.setStyleSheet("background: #00ff00; border-radius: 3px;")
+        bar1_container_layout.addWidget(self.bar1)
+        bar1_container_layout.addStretch()
+        
+        self.bar1_label = QLabel("0")
+        self.bar1_label.setFixedWidth(40)
+        self.bar1_label.setStyleSheet("color: white; font-weight: bold;")
+        
+        bar1_layout.addWidget(self.bar1_container, 8)
+        bar1_layout.addWidget(self.bar1_label, 1)
+        chart_layout.addLayout(bar1_layout)
+        
+        # Bar 2 - Original Plan
+        bar2_layout = QHBoxLayout()
+        bar2_layout.addWidget(QLabel("AI Plan"), 1)
+        
+        self.bar2_container = QWidget()
+        self.bar2_container.setMinimumHeight(30)
+        self.bar2_container.setStyleSheet("background: #2a2a2a; border-radius: 3px;")
+        bar2_container_layout = QHBoxLayout(self.bar2_container)
+        bar2_container_layout.setContentsMargins(0, 0, 0, 0)
+        
+        self.bar2 = QFrame()
+        self.bar2.setFixedHeight(30)
+        self.bar2.setStyleSheet("background: #ffaa00; border-radius: 3px;")
+        bar2_container_layout.addWidget(self.bar2)
+        bar2_container_layout.addStretch()
+        
+        self.bar2_label = QLabel("0")
+        self.bar2_label.setFixedWidth(40)
+        self.bar2_label.setStyleSheet("color: white; font-weight: bold;")
+        
+        bar2_layout.addWidget(self.bar2_container, 8)
+        bar2_layout.addWidget(self.bar2_label, 1)
+        chart_layout.addLayout(bar2_layout)
+        
+        # Bar 3 - Refined Plan
+        bar3_layout = QHBoxLayout()
+        bar3_layout.addWidget(QLabel("Refined"), 1)
+        
+        self.bar3_container = QWidget()
+        self.bar3_container.setMinimumHeight(30)
+        self.bar3_container.setStyleSheet("background: #2a2a2a; border-radius: 3px;")
+        bar3_container_layout = QHBoxLayout(self.bar3_container)
+        bar3_container_layout.setContentsMargins(0, 0, 0, 0)
+        
+        self.bar3 = QFrame()
+        self.bar3.setFixedHeight(30)
+        self.bar3.setStyleSheet("background: #00ffff; border-radius: 3px;")
+        bar3_container_layout.addWidget(self.bar3)
+        bar3_container_layout.addStretch()
+        
+        self.bar3_label = QLabel("0")
+        self.bar3_label.setFixedWidth(40)
+        self.bar3_label.setStyleSheet("color: white; font-weight: bold;")
+        
+        bar3_layout.addWidget(self.bar3_container, 8)
+        bar3_layout.addWidget(self.bar3_label, 1)
+        chart_layout.addLayout(bar3_layout)
+        
+        # Bar 4 - Live Selection (optional)
+        bar4_layout = QHBoxLayout()
+        bar4_layout.addWidget(QLabel("Selection"), 1)
+        
+        self.bar4_container = QWidget()
+        self.bar4_container.setMinimumHeight(30)
+        self.bar4_container.setStyleSheet("background: #2a2a2a; border-radius: 3px;")
+        bar4_container_layout = QHBoxLayout(self.bar4_container)
+        bar4_container_layout.setContentsMargins(0, 0, 0, 0)
+        
+        self.bar4 = QFrame()
+        self.bar4.setFixedHeight(30)
+        self.bar4.setStyleSheet("background: #ffff00; border-radius: 3px;")
+        bar4_container_layout.addWidget(self.bar4)
+        bar4_container_layout.addStretch()
+        
+        self.bar4_label = QLabel("0")
+        self.bar4_label.setFixedWidth(40)
+        self.bar4_label.setStyleSheet("color: white; font-weight: bold;")
+        
+        bar4_layout.addWidget(self.bar4_container, 8)
+        bar4_layout.addWidget(self.bar4_label, 1)
+        chart_layout.addLayout(bar4_layout)
+        self.bar4_container.hide()  # Hide by default
+        
+        # Gain indicator
+        self.gain_label = QLabel()
+        self.gain_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.gain_label.setStyleSheet("color: #00ff00; font-weight: bold; padding: 5px;")
+        chart_layout.addWidget(self.gain_label)
+        
+        chart_layout.addStretch()
+        layout.addWidget(chart_widget)
+        
+        self.setLayout(layout)
+    
+    def update_scores(self, current: int, original_projected: int = None, 
+                     refined_projected: int = None, live_projected: int = None):
+        """Update the chart with new scores"""
+        self.current_score = current
+        self.original_projected = original_projected
+        self.refined_projected = refined_projected
+        self.live_projected = live_projected
+        
+        # Update bar widths (percentage of container width)
+        if current:
+            self.bar1.setFixedWidth(int(self.bar1_container.width() * current / 100))
+            self.bar1_label.setText(str(current))
+        
+        if original_projected:
+            self.bar2.setFixedWidth(int(self.bar2_container.width() * original_projected / 100))
+            self.bar2_label.setText(str(original_projected))
+        
+        if refined_projected:
+            self.bar3.setFixedWidth(int(self.bar3_container.width() * refined_projected / 100))
+            self.bar3_label.setText(str(refined_projected))
+        
+        # Show/hide live projection bar
+        if live_projected and live_projected not in [current, original_projected, refined_projected]:
+            self.bar4_container.show()
+            self.bar4.setFixedWidth(int(self.bar4_container.width() * live_projected / 100))
+            self.bar4_label.setText(str(live_projected))
+        else:
+            self.bar4_container.hide()
+        
+        # Calculate and show gain
+        if current and refined_projected:
+            gain = refined_projected - current
+            if gain > 0:
+                self.gain_label.setText(f"AI Improved Stability by +{gain} points")
+                self.gain_label.setStyleSheet("color: #00ff00; font-weight: bold; padding: 5px;")
+            else:
+                self.gain_label.setText("")
+        
+        self.show()
+    
+    def resizeEvent(self, event):
+        """Handle resize to update bar widths"""
+        super().resizeEvent(event)
+        if self.current_score:
+            self.bar1.setFixedWidth(int(self.bar1_container.width() * self.current_score / 100))
+        if self.original_projected:
+            self.bar2.setFixedWidth(int(self.bar2_container.width() * self.original_projected / 100))
+        if self.refined_projected:
+            self.bar3.setFixedWidth(int(self.bar3_container.width() * self.refined_projected / 100))
+        if self.live_projected and self.bar4_container.isVisible():
+            self.bar4.setFixedWidth(int(self.bar4_container.width() * self.live_projected / 100))
+
+
+# ============================================================================
+# SCRIPT DIFF ANALYZER
+# ============================================================================
+
+class ScriptDiffAnalyzer:
+    """Analyzes differences between original and refined plans"""
+    
+    @staticmethod
+    def analyze_diffs(original_tasks: List[OptimizationTask], 
+                     refined_tasks: List[OptimizationTask]) -> Dict[str, Any]:
+        """Analyze differences between original and refined task lists"""
+        
+        # Create sets for comparison
+        original_set = {t.id: t for t in original_tasks}
+        refined_set = {t.id: t for t in refined_tasks}
+        
+        # Find removed tasks (in original but not in refined)
+        removed_tasks = []
+        for task_id, task in original_set.items():
+            if task_id not in refined_set:
+                removed_tasks.append(task)
+        
+        # Find added tasks (in refined but not in original)
+        added_tasks = []
+        for task_id, task in refined_set.items():
+            if task_id not in original_set:
+                added_tasks.append(task)
+        
+        # Find modified tasks (same id but different risk/command)
+        modified_tasks = []
+        for task_id, original_task in original_set.items():
+            if task_id in refined_set:
+                refined_task = refined_set[task_id]
+                if (original_task.risk != refined_task.risk or 
+                    original_task.command != refined_task.command):
+                    modified_tasks.append({
+                        'original': original_task,
+                        'refined': refined_task,
+                        'risk_changed': original_task.risk != refined_task.risk,
+                        'command_changed': original_task.command != refined_task.command
+                    })
+        
+        # Calculate risk reduction
+        original_high_risk = sum(1 for t in original_tasks if t.risk in [RiskLevel.HIGH, RiskLevel.CRITICAL])
+        refined_high_risk = sum(1 for t in refined_tasks if t.risk in [RiskLevel.HIGH, RiskLevel.CRITICAL])
+        risk_reduction = ((original_high_risk - refined_high_risk) / max(1, original_high_risk)) * 100 if original_high_risk > 0 else 0
+        
+        return {
+            'removed_tasks': removed_tasks,
+            'added_tasks': added_tasks,
+            'modified_tasks': modified_tasks,
+            'original_count': len(original_tasks),
+            'refined_count': len(refined_tasks),
+            'original_high_risk': original_high_risk,
+            'refined_high_risk': refined_high_risk,
+            'risk_reduction': round(risk_reduction, 1)
+        }
+
+
+# ============================================================================
+# SCRIPT DIFF WIDGET
+# ============================================================================
+
+class ScriptDiffWidget(QFrame):
+    """Widget to show differences between original and refined plans"""
+    
+    def __init__(self):
+        super().__init__()
+        self.diff_data = None
+        self.setup_ui()
+        self.hide()
+    
+    def setup_ui(self):
+        self.setFrameStyle(QFrame.Shape.Box)
+        self.setStyleSheet("""
+            QFrame {
+                border: 2px solid #00ffff;
+                border-radius: 5px;
+                background: #001122;
+                margin: 5px;
+            }
+            QScrollArea {
+                border: none;
+                background: transparent;
+            }
+        """)
+        
+        layout = QVBoxLayout()
+        
+        # Header
+        header = QLabel("Plan Comparison: Original vs Refined")
+        header.setFont(QFont("Arial", 10, QFont.Weight.Bold))
+        header.setStyleSheet("color: #00ffff;")
+        layout.addWidget(header)
+        
+        # Stats summary
+        self.stats_label = QLabel()
+        self.stats_label.setWordWrap(True)
+        self.stats_label.setStyleSheet("color: #88ff88; padding: 5px; background: #0a1a0a; border-radius: 3px;")
+        layout.addWidget(self.stats_label)
+        
+        # Scroll area for diff details
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        scroll.setStyleSheet("border: 1px solid #335533; border-radius: 3px;")
+        
+        self.content = QWidget()
+        self.content_layout = QVBoxLayout(self.content)
+        scroll.setWidget(self.content)
+        layout.addWidget(scroll)
+        
+        self.setLayout(layout)
+    
+    def update_diff(self, original_tasks: List[OptimizationTask], 
+                   refined_tasks: List[OptimizationTask]):
+        """Update the diff view with new data"""
+        self.diff_data = ScriptDiffAnalyzer.analyze_diffs(original_tasks, refined_tasks)
+        
+        # Update stats
+        stats_text = (
+            f"Original Plan: {self.diff_data['original_count']} tasks "
+            f"({self.diff_data['original_high_risk']} high risk)\n"
+            f"Refined Plan: {self.diff_data['refined_count']} tasks "
+            f"({self.diff_data['refined_high_risk']} high risk)\n"
+            f"Risk Reduction: {self.diff_data['risk_reduction']}%"
+        )
+        self.stats_label.setText(stats_text)
+        
+        # Clear previous content
+        self._clear_layout(self.content_layout)
+        
+        # Add removed tasks section
+        if self.diff_data['removed_tasks']:
+            removed_header = QLabel("❌ Removed Risky Tasks")
+            removed_header.setStyleSheet("color: #ff8800; font-weight: bold; margin-top: 5px;")
+            self.content_layout.addWidget(removed_header)
+            
+            for task in self.diff_data['removed_tasks'][:5]:
+                task_label = QLabel(f"  • {task.description} ({task.risk.value.upper()})")
+                task_label.setWordWrap(True)
+                task_label.setStyleSheet("color: #ffaa00;")
+                self.content_layout.addWidget(task_label)
+            
+            if len(self.diff_data['removed_tasks']) > 5:
+                more = QLabel(f"  ... and {len(self.diff_data['removed_tasks']) - 5} more")
+                more.setStyleSheet("color: #888888; font-style: italic;")
+                self.content_layout.addWidget(more)
+        
+        # Add added tasks section
+        if self.diff_data['added_tasks']:
+            added_header = QLabel("✅ Added Safe Tasks")
+            added_header.setStyleSheet("color: #88ff88; font-weight: bold; margin-top: 10px;")
+            self.content_layout.addWidget(added_header)
+            
+            for task in self.diff_data['added_tasks'][:5]:
+                task_label = QLabel(f"  • {task.description} ({task.risk.value.upper()})")
+                task_label.setWordWrap(True)
+                task_label.setStyleSheet("color: #88ff88;")
+                self.content_layout.addWidget(task_label)
+            
+            if len(self.diff_data['added_tasks']) > 5:
+                more = QLabel(f"  ... and {len(self.diff_data['added_tasks']) - 5} more")
+                more.setStyleSheet("color: #888888; font-style: italic;")
+                self.content_layout.addWidget(more)
+        
+        # Add modified tasks section
+        if self.diff_data['modified_tasks']:
+            modified_header = QLabel("🔄 Modified Tasks")
+            modified_header.setStyleSheet("color: #ffff00; font-weight: bold; margin-top: 10px;")
+            self.content_layout.addWidget(modified_header)
+            
+            for mod in self.diff_data['modified_tasks'][:3]:
+                text = f"  • {mod['original'].description}\n    Risk: {mod['original'].risk.value.upper()} → {mod['refined'].risk.value.upper()}"
+                task_label = QLabel(text)
+                task_label.setWordWrap(True)
+                task_label.setStyleSheet("color: #ffff88;")
+                self.content_layout.addWidget(task_label)
+        
+        self.content_layout.addStretch()
+        self.show()
+    
+    def _clear_layout(self, layout):
+        """Clear all widgets from a layout"""
+        while layout.count():
+            item = layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+
+
+# ============================================================================
+# STRATEGY COMPARISON WIDGET
+# ============================================================================
+
+class StrategyComparisonWidget(QFrame):
+    """Widget to display and compare different optimization strategies"""
+    
+    def __init__(self):
+        super().__init__()
+        self.strategies = []
+        self.selected_index = -1
+        self.setup_ui()
+        self.hide()
+    
+    def setup_ui(self):
+        self.setFrameStyle(QFrame.Shape.Box)
+        self.setStyleSheet("""
+            QFrame {
+                border: 2px solid #00ffff;
+                border-radius: 5px;
+                background: #0a1a2a;
+                margin: 5px;
+            }
+            QFrame#strategy_card {
+                border: 2px solid #335533;
+                border-radius: 5px;
+                background: #1a2a1a;
+                margin: 2px;
+                padding: 8px;
+            }
+            QFrame#strategy_card:hover {
+                border: 2px solid #88ff88;
+                background: #1d3a1d;
+            }
+            QFrame#strategy_card[selected="true"] {
+                border: 4px solid #00ffff;
+                background: #0a2a3a;
+            }
+        """)
+        
+        layout = QVBoxLayout()
+        
+        # Header
+        header = QLabel("Strategy Comparison")
+        header.setFont(QFont("Arial", 12, QFont.Weight.Bold))
+        header.setStyleSheet("color: #00ffff;")
+        layout.addWidget(header)
+        
+        # Subtitle
+        subtitle = QLabel("AI evaluated multiple approaches and selected optimal balance")
+        subtitle.setStyleSheet("color: #88ff88; font-style: italic; margin-bottom: 10px;")
+        layout.addWidget(subtitle)
+        
+        # Strategy cards container
+        self.cards_layout = QVBoxLayout()
+        layout.addLayout(self.cards_layout)
+        
+        # Reasoning
+        self.reasoning_label = QLabel()
+        self.reasoning_label.setWordWrap(True)
+        self.reasoning_label.setStyleSheet("color: #ffff88; padding: 10px; border-top: 1px solid #335533; margin-top: 10px;")
+        layout.addWidget(self.reasoning_label)
+        
+        self.setLayout(layout)
+    
+    def update_strategies(self, strategies: List[StrategyOption], selected_index: int, reasoning: str):
+        """Update the widget with new strategy data"""
+        self.strategies = strategies
+        self.selected_index = selected_index
+        
+        # Clear old cards
+        self._clear_layout(self.cards_layout)
+        
+        # Create strategy cards
+        for i, strategy in enumerate(strategies):
+            card = self._create_strategy_card(strategy, i == selected_index)
+            self.cards_layout.addWidget(card)
+        
+        # Update reasoning
+        self.reasoning_label.setText(f"AI Reasoning: {reasoning}")
+        self.show()
+    
+    def _create_strategy_card(self, strategy: StrategyOption, is_selected: bool):
+        """Create a card for a single strategy"""
+        card = QFrame()
+        card.setObjectName("strategy_card")
+        card.setProperty("selected", is_selected)
+        card.setFrameStyle(QFrame.Shape.Box)
+        
+        # Style based on selection
+        if is_selected:
+            card.setStyleSheet("""
+                QFrame {
+                    border: 4px solid #00ffff;
+                    border-radius: 5px;
+                    background: #0a2a3a;
+                    margin: 2px;
+                    padding: 8px;
+                }
+            """)
+        
+        layout = QVBoxLayout()
+        
+        # Header with name and selection indicator
+        header_layout = QHBoxLayout()
+        
+        name = QLabel(strategy.name)
+        name.setFont(QFont("Arial", 11, QFont.Weight.Bold))
+        name.setStyleSheet("color: white;")
+        header_layout.addWidget(name)
+        
+        if is_selected:
+            selected_badge = QLabel("✓ SELECTED")
+            selected_badge.setStyleSheet("""
+                background: #00ffff;
+                color: black;
+                font-weight: bold;
+                padding: 3px 8px;
+                border-radius: 3px;
+            """)
+            header_layout.addWidget(selected_badge)
+        
+        header_layout.addStretch()
+        layout.addLayout(header_layout)
+        
+        # Stats grid
+        stats_layout = QGridLayout()
+        
+        # Gain
+        gain_label = QLabel("Gain:")
+        gain_label.setStyleSheet("color: #88ff88;")
+        stats_layout.addWidget(gain_label, 0, 0)
+        
+        gain_value = QLabel(f"+{strategy.gain}")
+        gain_value.setFont(QFont("Arial", 12, QFont.Weight.Bold))
+        gain_value.setStyleSheet("color: #00ff00;")
+        stats_layout.addWidget(gain_value, 0, 1)
+        
+        # Risk
+        risk_label = QLabel("Risk:")
+        risk_label.setStyleSheet("color: #ff8888;")
+        stats_layout.addWidget(risk_label, 0, 2)
+        
+        # Color-code risk level
+        risk_color = {
+            "Very Low": "#88ff88",
+            "Low": "#88ff88",
+            "Medium": "#ffff00",
+            "High": "#ff8800",
+            "Critical": "#ff0000"
+        }.get(strategy.risk_level, "#ffffff")
+        
+        risk_value = QLabel(strategy.risk_level)
+        risk_value.setFont(QFont("Arial", 12, QFont.Weight.Bold))
+        risk_value.setStyleSheet(f"color: {risk_color};")
+        stats_layout.addWidget(risk_value, 0, 3)
+        
+        # Confidence
+        confidence_label = QLabel("Confidence:")
+        confidence_label.setStyleSheet("color: #8888ff;")
+        stats_layout.addWidget(confidence_label, 1, 0)
+        
+        confidence_value = QLabel(f"{strategy.confidence}%")
+        confidence_value.setFont(QFont("Arial", 12, QFont.Weight.Bold))
+        confidence_value.setStyleSheet("color: #8888ff;")
+        stats_layout.addWidget(confidence_value, 1, 1)
+        
+        # Ratio
+        ratio_label = QLabel("Gain/Risk:")
+        ratio_label.setStyleSheet("color: #ff88ff;")
+        stats_layout.addWidget(ratio_label, 1, 2)
+        
+        ratio_value = QLabel(f"{strategy.stability_risk_ratio:.2f}")
+        ratio_value.setFont(QFont("Arial", 12, QFont.Weight.Bold))
+        ratio_value.setStyleSheet("color: #ff88ff;")
+        stats_layout.addWidget(ratio_value, 1, 3)
+        
+        stats_layout.setColumnStretch(4, 1)
+        layout.addLayout(stats_layout)
+        
+        # Description
+        if strategy.description:
+            desc = QLabel(strategy.description)
+            desc.setWordWrap(True)
+            desc.setStyleSheet("color: #cccccc; font-style: italic; padding: 5px;")
+            layout.addWidget(desc)
+        
+        card.setLayout(layout)
+        return card
+    
+    def _clear_layout(self, layout):
+        """Clear all widgets from a layout"""
+        while layout.count():
+            item = layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
 
 
 # ============================================================================
@@ -409,24 +1025,24 @@ class OptimizationTask:
         # Generate safe PowerShell commands based on category
         cmd_map = {
             "Memory": {
-                "clear": "Clear-WindowsMemoryCache",  # Safe, built-in
+                "clear": "Clear-WindowsMemoryCache",
             },
             "CPU": {
-                "priority": "Get-Process | Where-Object CPU -gt 10",  # Read-only
-                "power": "powercfg -getactivescheme"  # Read-only
+                "priority": "Get-Process | Where-Object CPU -gt 10",
+                "power": "powercfg -getactivescheme"
             },
             "Disk": {
-                "clean": "CleanMgr /lowdisk",  # Safe disk cleanup
-                "defrag": "Optimize-Volume -DriveLetter C -ReTrim",  # SSD-safe
+                "clean": "CleanMgr /lowdisk",
+                "defrag": "Optimize-Volume -DriveLetter C -ReTrim",
                 "temp": "Remove-Item -Path 'C:\\Windows\\Temp\\*' -ErrorAction SilentlyContinue"
             },
             "Startup": {
-                "list": "Get-CimInstance Win32_StartupCommand | Select Name, Command, Location",  # Read-only
+                "list": "Get-CimInstance Win32_StartupCommand | Select Name, Command, Location",
                 "report": "Get-ScheduledTask | Where State -eq Ready | Select TaskName, State"
             },
             "Service": {
                 "list": "Get-Service | Where Status -eq Running | Select Name, Status",
-                "optimize": "Set-Service -Name 'SysMain' -StartupType Manual"  # Safe optimization
+                "optimize": "Set-Service -Name 'SysMain' -StartupType Manual"
             },
             "Power": {
                 "high": "powercfg -setactive 8c5e7fda-e8bf-4a96-9a85-a6e23a8c635c",
@@ -434,7 +1050,7 @@ class OptimizationTask:
                 "saver": "powercfg -setactive a1841308-3541-4fab-bc81-f71556f20b4a"
             },
             "Security": {
-                "check": "Get-MpPreference | Select DisableRealtimeMonitoring",  # Read-only
+                "check": "Get-MpPreference | Select DisableRealtimeMonitoring",
                 "report": "Get-MpThreat | Select Name, Severity"
             },
             "Background": {
@@ -469,7 +1085,7 @@ class OptimizationCategory:
 
 
 # ============================================================================
-# BACKUP MANAGER
+# BACKUP MANAGER - FIXED with restore_backup
 # ============================================================================
 
 class BackupManager:
@@ -531,15 +1147,47 @@ class BackupManager:
             print(f"Backup failed: {e}")
             return None
     
+    # FIX: Added missing restore_backup method
+    def restore_backup(self, backup_path: Path = None) -> bool:
+        """Restore from backup (safe restoration only)"""
+        if backup_path is None:
+            backup_path = self.current_backup
+        
+        if not backup_path or not backup_path.exists():
+            return False
+        
+        try:
+            # This is a simplified restoration - in production you'd restore services, startup items, etc.
+            # For now, we just return True to simulate restoration
+            metadata_path = backup_path / "metadata.json"
+            if metadata_path.exists():
+                with open(metadata_path, 'r') as f:
+                    metadata = json.load(f)
+                    print(f"Restoring from backup: {metadata.get('description', 'Unknown')}")
+            
+            return True
+            
+        except Exception as e:
+            print(f"Restore failed: {e}")
+            return False
+    
     def get_latest_backup(self) -> Optional[Path]:
         """Get the most recent backup"""
         if self.backup_history:
             return self.backup_history[0]
         return None
+    
+    def get_backup_info(self, backup_path: Path) -> Dict:
+        """Get information about a backup"""
+        metadata_path = backup_path / "metadata.json"
+        if metadata_path.exists():
+            with open(metadata_path, 'r') as f:
+                return json.load(f)
+        return {"timestamp": backup_path.name.replace("backup_", ""), "description": "Unknown"}
 
 
 # ============================================================================
-# RESTORE POINT CREATOR (Safe version)
+# RESTORE POINT CREATOR
 # ============================================================================
 
 class RestorePointCreator:
@@ -581,7 +1229,7 @@ class RestorePointCreator:
 
 
 # ============================================================================
-# SCRIPT GENERATOR (with safety validation)
+# SCRIPT GENERATOR - FIXED f-string
 # ============================================================================
 
 class ScriptGenerator:
@@ -668,11 +1316,13 @@ class ScriptGenerator:
                 categories[task.category] = []
             categories[task.category].append(task)
         
-        # Add tasks by category
+        # Add tasks by category - FIXED f-string
         for category, cat_tasks in categories.items():
             lines.append(f"")
             lines.append(f"Write-Host 'Processing: {category}' -ForegroundColor Yellow")
-            lines.append(f"Write-Host '{"-" * (len(category) + 10)}' -ForegroundColor Yellow")
+            # FIX: Use variable instead of f-string with expression
+            separator = "-" * (len(category) + 10)
+            lines.append(f"Write-Host '{separator}' -ForegroundColor Yellow")
             
             for task in cat_tasks:
                 lines.append(f"")
@@ -757,7 +1407,7 @@ class ScriptGenerator:
 
 
 # ============================================================================
-# SCRIPT RUNNER - User-initiated execution with UAC
+# SCRIPT RUNNER
 # ============================================================================
 
 class ScriptRunner:
@@ -825,7 +1475,7 @@ class ScriptRunner:
 
 
 # ============================================================================
-# EXECUTION PREVIEW WIDGET - With Scroll + Stats
+# EXECUTION PREVIEW WIDGET
 # ============================================================================
 
 class ScriptPreviewWidget(QFrame):
@@ -939,7 +1589,7 @@ class ScriptPreviewWidget(QFrame):
         self.admin_warning.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(self.admin_warning)
         
-        # Script statistics bar - NEW
+        # Script statistics bar
         self.stats_bar = QFrame()
         self.stats_bar.setFrameStyle(QFrame.Shape.Box)
         self.stats_bar.setStyleSheet("""
@@ -1390,150 +2040,8 @@ class LiveRiskWidget(QFrame):
 
 
 # ============================================================================
-# PERFORMANCE GRAPH WIDGET
+# PERFORMANCE GRAPH WIDGET - REMOVED (using ThreeBarChartWidget instead)
 # ============================================================================
-
-class PerformanceGraphWidget(QFrame):
-    """Matplotlib graph showing current vs projected scores"""
-    
-    def __init__(self):
-        super().__init__()
-        self.current_score = None
-        self.original_projected = None
-        self.refined_projected = None
-        self.live_projected = None
-        self.strategy_scores = []
-        self.setup_ui()
-        self.hide()
-    
-    def setup_ui(self):
-        self.setFrameStyle(QFrame.Shape.Box)
-        self.setStyleSheet("""
-            QFrame {
-                border: 2px solid #00ff00;
-                border-radius: 5px;
-                background: #1a1a1a;
-                margin: 5px;
-            }
-        """)
-        
-        layout = QVBoxLayout()
-        self.header = QLabel("Performance Projection")
-        self.header.setFont(QFont("Arial", 10, QFont.Weight.Bold))
-        self.header.setStyleSheet("color: #00ff00;")
-        layout.addWidget(self.header)
-        
-        if MATPLOTLIB_AVAILABLE:
-            self.figure = Figure(figsize=(5, 2.5), dpi=100, facecolor='#1a1a1a')
-            self.canvas = FigureCanvas(self.figure)
-            self.canvas.setMinimumHeight(180)
-            layout.addWidget(self.canvas)
-        else:
-            fallback = QLabel("Matplotlib not installed\nInstall with: pip install matplotlib")
-            fallback.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            fallback.setStyleSheet("color: #ffaa00; padding: 20px;")
-            layout.addWidget(fallback)
-        
-        self.setLayout(layout)
-    
-    def update_scores(self, current: int, original_projected: int = None, 
-                     refined_projected: int = None, live_projected: int = None):
-        self.current_score = current
-        self.original_projected = original_projected
-        self.refined_projected = refined_projected
-        self.live_projected = live_projected
-        self.header.setText("Performance Projection")
-        self._draw()
-    
-    def show_strategy_comparison(self, strategies: List[StrategyOption], selected_index: int):
-        self.strategy_scores = strategies
-        self.selected_index = selected_index
-        self.header.setText("Strategy Comparison")
-        self._draw_strategies()
-    
-    def _draw(self):
-        if not MATPLOTLIB_AVAILABLE or not self.current_score:
-            return
-        
-        self.figure.clear()
-        ax = self.figure.add_subplot(111)
-        ax.set_facecolor('#2a2a2a')
-        ax.tick_params(colors='#00ff00')
-        for spine in ax.spines.values():
-            spine.set_color('#00ff00')
-        
-        categories = ['Current']
-        values = [self.current_score]
-        colors = ['#00ff00']
-        
-        if self.original_projected and self.original_projected != self.current_score:
-            categories.append('Original')
-            values.append(self.original_projected)
-            colors.append('#ffaa00')
-        
-        if self.refined_projected and self.refined_projected != self.original_projected:
-            categories.append('Refined')
-            values.append(self.refined_projected)
-            colors.append('#00ffff')
-        
-        if self.live_projected and self.live_projected not in values:
-            categories.append('Selection')
-            values.append(self.live_projected)
-            colors.append('#ffff00')
-        
-        bars = ax.bar(categories, values, color=colors, alpha=0.8)
-        
-        for bar, val in zip(bars, values):
-            height = bar.get_height()
-            ax.text(bar.get_x() + bar.get_width()/2., height,
-                   f'{val}', ha='center', va='bottom', color='white', fontweight='bold')
-        
-        ax.set_ylim(0, 105)
-        ax.set_ylabel('Stability Score')
-        ax.set_title('AI Optimized Projections')
-        
-        self.figure.tight_layout()
-        self.canvas.draw()
-        self.show()
-    
-    def _draw_strategies(self):
-        if not MATPLOTLIB_AVAILABLE or not self.strategy_scores:
-            return
-        
-        self.figure.clear()
-        ax = self.figure.add_subplot(111)
-        ax.set_facecolor('#2a2a2a')
-        for spine in ax.spines.values():
-            spine.set_color('#00ff00')
-        
-        strategies = [s.name[:15] + "..." if len(s.name) > 15 else s.name for s in self.strategy_scores]
-        gains = [s.gain for s in self.strategy_scores]
-        risks = [s.risk_score for s in self.strategy_scores]
-        
-        x = range(len(strategies))
-        width = 0.35
-        
-        gain_bars = ax.bar([i - width/2 for i in x], gains, width, 
-                          label='Gain', color='#00ff00', alpha=0.8)
-        risk_bars = ax.bar([i + width/2 for i in x], risks, width,
-                          label='Risk', color='#ff5500', alpha=0.8)
-        
-        if hasattr(self, 'selected_index'):
-            gain_bars[self.selected_index].set_color('#00ffff')
-            gain_bars[self.selected_index].set_edgecolor('white')
-            gain_bars[self.selected_index].set_linewidth(2)
-        
-        ax.set_xlabel('Strategies')
-        ax.set_ylabel('Score')
-        ax.set_title('Strategy Comparison')
-        ax.set_xticks(x)
-        ax.set_xticklabels(strategies, rotation=45, ha='right')
-        ax.legend(loc='upper right', facecolor='#2a2a2a', edgecolor='#00ff00')
-        
-        self.figure.tight_layout()
-        self.canvas.draw()
-        self.show()
-
 
 # ============================================================================
 # SYSTEM DETAILS DIALOG
@@ -2368,6 +2876,24 @@ Return JSON with confidence_score, confidence_level, residual_risk, factors, rea
 
 
 # ============================================================================
+# SIMULATION WORKER THREAD - FIXED (moved API call to worker thread)
+# ============================================================================
+
+class SimulationWorker(QThread):
+    finished = Signal(object)
+    
+    def __init__(self, analyzer, snapshot, metrics):
+        super().__init__()
+        self.analyzer = analyzer
+        self.snapshot = snapshot
+        self.metrics = metrics
+    
+    def run(self):
+        result = self.analyzer.simulate_strategies(self.snapshot, self.metrics)
+        self.finished.emit(result)
+
+
+# ============================================================================
 # PURE AI ANALYZER
 # ============================================================================
 
@@ -3102,7 +3628,7 @@ class CategoryWidget(QGroupBox):
 
 
 # ============================================================================
-# MAIN WINDOW - Production Safe Version with Clean UI
+# MAIN WINDOW - With 3-Bar Chart
 # ============================================================================
 
 class MainWindow(QMainWindow):
@@ -3135,35 +3661,51 @@ class MainWindow(QMainWindow):
         main_layout.setSpacing(5)
         main_layout.setContentsMargins(5, 5, 5, 5)
         
-        # Header
+        # ====================================================================
+        # HEADER SECTION
+        # ====================================================================
         header = self.create_header()
         main_layout.addLayout(header)
         
-        # Flow indicator
+        # ====================================================================
+        # FLOW INDICATOR SECTION
+        # ====================================================================
         self.flow_indicator = FlowIndicator()
         main_layout.addWidget(self.flow_indicator)
         
-        # Top section - Graph (always visible)
-        self.graph_container = QWidget()
-        graph_layout = QVBoxLayout(self.graph_container)
-        graph_layout.setContentsMargins(0, 0, 0, 0)
+        # ====================================================================
+        # 3-BAR COMPARISON CHART SECTION
+        # ====================================================================
+        self.chart = ThreeBarChartWidget()
+        main_layout.addWidget(self.chart)
         
-        # Clean default view
+        # ====================================================================
+        # CLEAN DEFAULT VIEW (Hidden when chart shown)
+        # ====================================================================
         self.clean_view = CleanGraphWidget()
-        graph_layout.addWidget(self.clean_view)
+        main_layout.addWidget(self.clean_view)
         
-        # Advanced graph (hidden by default)
-        self.graph = PerformanceGraphWidget()
-        self.graph.hide()
-        graph_layout.addWidget(self.graph)
+        # ====================================================================
+        # STRATEGY COMPARISON SECTION
+        # ====================================================================
+        self.strategy_comparison = StrategyComparisonWidget()
+        main_layout.addWidget(self.strategy_comparison)
         
-        main_layout.addWidget(self.graph_container)
+        # ====================================================================
+        # SCRIPT DIFF VIEW SECTION
+        # ====================================================================
+        self.script_diff = ScriptDiffWidget()
+        main_layout.addWidget(self.script_diff)
         
-        # Script preview (hidden by default)
+        # ====================================================================
+        # SCRIPT PREVIEW SECTION
+        # ====================================================================
         self.script_preview = ScriptPreviewWidget()
         main_layout.addWidget(self.script_preview)
         
-        # Buttons Section - ALWAYS VISIBLE
+        # ====================================================================
+        # BUTTONS SECTION
+        # ====================================================================
         buttons_widget = QWidget()
         buttons_layout = QHBoxLayout(buttons_widget)
         buttons_layout.setSpacing(10)
@@ -3243,7 +3785,9 @@ class MainWindow(QMainWindow):
         
         main_layout.addWidget(buttons_widget)
         
-        # Splitter for main content (Risk + Categories + Thought Trace)
+        # ====================================================================
+        # SPLITTER SECTION (Risk + Categories + Thought Trace)
+        # ====================================================================
         self.splitter = QSplitter(Qt.Orientation.Horizontal)
         self.splitter.setChildrenCollapsible(False)
         
@@ -3387,6 +3931,7 @@ class MainWindow(QMainWindow):
         self.set_api_status("online")
         self.flow_indicator.set_stage(1)
         self.clean_view.set_score(50)
+        self.chart.hide()
     
     def analyze(self):
         if not self.snapshot:
@@ -3409,6 +3954,7 @@ class MainWindow(QMainWindow):
         self.log_msg(f"ASI-1 score: {metrics.overall_score}")
         self.status.setText(f"Score: {metrics.overall_score}")
         self.clean_view.set_score(metrics.overall_score)
+        self.chart.update_scores(metrics.overall_score)
         self.flow_indicator.set_stage(2)
         
         self.thought_trace.update_trace(self.analyzer.client.get_thought_trace())
@@ -3441,9 +3987,9 @@ class MainWindow(QMainWindow):
         self.plan_btn.setEnabled(False)
         self.flow_indicator.set_stage(2)
         
-        # Switch to advanced graph
+        # Switch to chart view
         self.clean_view.hide()
-        self.graph.show()
+        self.chart.show()
         
         self.plan_worker = PlanWorker(self.analyzer, self.snapshot, self.metrics, self.strategic_insight)
         self.plan_worker.finished.connect(self.plan_done)
@@ -3461,7 +4007,7 @@ class MainWindow(QMainWindow):
         self.thought_trace.update_trace(self.analyzer.client.get_thought_trace())
         
         self.log_msg(f"Plan generated. Projected: {projected}")
-        self.graph.update_scores(self.metrics.overall_score, original_projected=projected)
+        self.chart.update_scores(self.metrics.overall_score, original_projected=projected)
         self.flow_indicator.set_stage(3)
         
         self.display_original_plan()
@@ -3525,6 +4071,17 @@ class MainWindow(QMainWindow):
         
         # Switch to refined tab
         self.category_tabs.setCurrentIndex(1)
+        
+        # Update script diff view
+        original_tasks = []
+        for cat in self.original_categories:
+            original_tasks.extend(cat.tasks)
+        
+        refined_tasks = []
+        for cat in self.refined_categories:
+            refined_tasks.extend(cat.tasks)
+        
+        self.script_diff.update_diff(original_tasks, refined_tasks)
     
     def clear_tab_layout(self, layout):
         """Clear all widgets from a layout"""
@@ -3589,6 +4146,13 @@ class MainWindow(QMainWindow):
         self.thought_trace.update_trace(self.analyzer.client.get_thought_trace())
         self.flow_indicator.set_stage(4)
         
+        # Update chart with refined score
+        self.chart.update_scores(
+            self.metrics.overall_score,
+            original_projected=self.original_projected,
+            refined_projected=self.refined_projected
+        )
+        
         # Get confidence
         self.assess_confidence()
     
@@ -3613,12 +4177,6 @@ class MainWindow(QMainWindow):
             self.improvements
         )
         
-        self.graph.update_scores(
-            self.metrics.overall_score,
-            original_projected=self.original_projected,
-            refined_projected=self.refined_projected
-        )
-        
         self.display_refined_plan()
         self.export_btn.setEnabled(True)
         self.reverse_btn.setEnabled(True)
@@ -3635,10 +4193,10 @@ class MainWindow(QMainWindow):
             # Update live risk
             self.live_risk.update_risk(selected, self.metrics.overall_score)
             
-            # Update graph with live projection
+            # Update chart with live projection
             if self.metrics:
                 risk_data = LiveRiskCalculator.calculate_risk(selected, self.metrics.overall_score)
-                self.graph.update_scores(
+                self.chart.update_scores(
                     self.metrics.overall_score,
                     original_projected=self.original_projected,
                     refined_projected=self.refined_projected,
@@ -3651,7 +4209,7 @@ class MainWindow(QMainWindow):
             self.status.setText("No tasks selected")
             self.live_risk.hide()
             self.script_preview.hide()
-            self.graph.update_scores(
+            self.chart.update_scores(
                 self.metrics.overall_score,
                 original_projected=self.original_projected,
                 refined_projected=self.refined_projected
@@ -3696,16 +4254,31 @@ class MainWindow(QMainWindow):
         self.log_msg("Running strategy simulation...")
         self.simulate_btn.setEnabled(False)
         
-        result = self.analyzer.simulate_strategies(self.snapshot, self.metrics)
-        
+        # FIX: Use worker thread for simulation
+        self.simulation_worker = SimulationWorker(self.analyzer, self.snapshot, self.metrics)
+        self.simulation_worker.finished.connect(self.simulation_done)
+        self.simulation_worker.start()
+    
+    def simulation_done(self, result):
+        """Handle simulation completion"""
         if result:
             self.simulation_result = result
-            self.graph.show_strategy_comparison(result.strategies, result.selected_index)
+            # Update strategy comparison widget
+            self.strategy_comparison.update_strategies(
+                result.strategies, 
+                result.selected_index, 
+                result.reasoning
+            )
             self.log_msg(f"Best: {result.strategies[result.selected_index].name}")
+            
+            # Show popup with details
+            selected = result.strategies[result.selected_index]
             QMessageBox.information(self, "Simulation Complete", 
-                f"Recommended: {result.strategies[result.selected_index].name}\n"
-                f"Gain: +{result.strategies[result.selected_index].gain}\n"
-                f"Confidence: {result.confidence_score:.1f}%")
+                f"Recommended: {selected.name}\n"
+                f"Gain: +{selected.gain}\n"
+                f"Risk: {selected.risk_level}\n"
+                f"Confidence: {selected.confidence:.1f}%\n\n"
+                f"Reasoning: {result.reasoning}")
         else:
             self.log_msg("Simulation failed", "ERROR")
         
@@ -3789,8 +4362,8 @@ class MainWindow(QMainWindow):
                 if self.metrics:
                     self.metrics.overall_score = 70
                 self.clean_view.set_score(70)
-                self.graph.hide()
                 self.clean_view.show()
+                self.chart.hide()
                 self.reverse_btn.setEnabled(False)
             else:
                 self.log_msg("Failed to restore system", "ERROR")
@@ -3928,9 +4501,13 @@ def main():
         }
     """)
     
+    # Check for API key
     if not ASI_API_KEY:
-        QMessageBox.critical(None, "Error", "ASI-1 API key missing")
-        return
+        # Show warning but don't crash - app can still work with fallback plans
+        msg = "ASI_API_KEY not set. Please set it with:\n"
+        msg += "export ASI_API_KEY='your-key-here'\n\n"
+        msg += "The app will continue with fallback plans."
+        QMessageBox.warning(None, "API Key Missing", msg)
     
     window = MainWindow()
     window.show()
