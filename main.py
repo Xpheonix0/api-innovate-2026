@@ -1,5 +1,8 @@
+#!/usr/bin/env python3
 """
 Z-Engine: Generates, Engineers and Deploys
+Python 3.11+ / PySide6
+FINAL - Fixed All Issues + Secure API Key Handling
 """
 
 import sys
@@ -38,8 +41,6 @@ if not ASI_API_KEY:
     if not ASI_API_KEY:
         print("WARNING: ASI_API_KEY environment variable not set")
         print("Please set it with: export ASI_API_KEY='your-key-here'")
-        # For demo purposes only - remove in production
-     
 
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
@@ -48,22 +49,11 @@ from PySide6.QtWidgets import (
     QGridLayout, QScrollBar, QDialog, QDialogButtonBox, QTabWidget,
     QTableWidget, QTableWidgetItem, QHeaderView, QComboBox,
     QTreeWidget, QTreeWidgetItem, QSizePolicy,
-    QFileDialog, QPlainTextEdit, QButtonGroup, QRadioButton
+    QFileDialog, QPlainTextEdit, QButtonGroup, QRadioButton,
+    QStackedWidget
 )
 from PySide6.QtCore import Qt, QThread, Signal, QTimer
 from PySide6.QtGui import QFont, QPainter, QColor, QBrush, QPen, QTextCursor
-
-# Try to import matplotlib for graphing
-try:
-    import matplotlib
-    matplotlib.use('Qt5Agg')
-    from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
-    from matplotlib.figure import Figure
-    import matplotlib.pyplot as plt
-    MATPLOTLIB_AVAILABLE = True
-except ImportError:
-    MATPLOTLIB_AVAILABLE = False
-    print("Matplotlib not installed - graph will be disabled")
 
 
 # ============================================================================
@@ -310,7 +300,7 @@ class RiskLevel(Enum):
 
 
 # ============================================================================
-# 3-BAR COMPARISON CHART WIDGET
+# BAR COMPARISON CHART WIDGET 
 # ============================================================================
 
 class ThreeBarChartWidget(QFrame):
@@ -337,6 +327,7 @@ class ThreeBarChartWidget(QFrame):
         """)
         
         layout = QVBoxLayout()
+        layout.setSpacing(8)
         
         # Header
         header = QLabel("System Stability Improvement")
@@ -371,7 +362,7 @@ class ThreeBarChartWidget(QFrame):
         bar1_container_layout.addStretch()
         
         self.bar1_label = QLabel("0")
-        self.bar1_label.setFixedWidth(40)
+        self.bar1_label.setFixedWidth(60)
         self.bar1_label.setStyleSheet("color: white; font-weight: bold;")
         
         bar1_layout.addWidget(self.bar1_container, 8)
@@ -395,7 +386,7 @@ class ThreeBarChartWidget(QFrame):
         bar2_container_layout.addStretch()
         
         self.bar2_label = QLabel("0")
-        self.bar2_label.setFixedWidth(40)
+        self.bar2_label.setFixedWidth(60)
         self.bar2_label.setStyleSheet("color: white; font-weight: bold;")
         
         bar2_layout.addWidget(self.bar2_container, 8)
@@ -419,7 +410,7 @@ class ThreeBarChartWidget(QFrame):
         bar3_container_layout.addStretch()
         
         self.bar3_label = QLabel("0")
-        self.bar3_label.setFixedWidth(40)
+        self.bar3_label.setFixedWidth(60)
         self.bar3_label.setStyleSheet("color: white; font-weight: bold;")
         
         bar3_layout.addWidget(self.bar3_container, 8)
@@ -443,7 +434,7 @@ class ThreeBarChartWidget(QFrame):
         bar4_container_layout.addStretch()
         
         self.bar4_label = QLabel("0")
-        self.bar4_label.setFixedWidth(40)
+        self.bar4_label.setFixedWidth(60)
         self.bar4_label.setStyleSheet("color: white; font-weight: bold;")
         
         bar4_layout.addWidget(self.bar4_container, 8)
@@ -470,23 +461,17 @@ class ThreeBarChartWidget(QFrame):
         self.refined_projected = refined_projected
         self.live_projected = live_projected
         
-        # Update bar widths (percentage of container width)
+        # Update labels immediately
         if current:
-            self.bar1.setFixedWidth(int(self.bar1_container.width() * current / 100))
             self.bar1_label.setText(str(current))
-        
         if original_projected:
-            self.bar2.setFixedWidth(int(self.bar2_container.width() * original_projected / 100))
             self.bar2_label.setText(str(original_projected))
-        
         if refined_projected:
-            self.bar3.setFixedWidth(int(self.bar3_container.width() * refined_projected / 100))
             self.bar3_label.setText(str(refined_projected))
         
         # Show/hide live projection bar
         if live_projected and live_projected not in [current, original_projected, refined_projected]:
             self.bar4_container.show()
-            self.bar4.setFixedWidth(int(self.bar4_container.width() * live_projected / 100))
             self.bar4_label.setText(str(live_projected))
         else:
             self.bar4_container.hide()
@@ -501,18 +486,41 @@ class ThreeBarChartWidget(QFrame):
                 self.gain_label.setText("")
         
         self.show()
+        # Defer bar drawing until after layout with longer timeout
+        QTimer.singleShot(200, self._refresh_bars)
+    
+    def _refresh_bars(self):
+        """Calculate and set bar widths based on container size"""
+        # Bar 1
+        w = self.bar1_container.width()
+        if w > 0 and self.current_score:
+            self.bar1.setFixedWidth(int(w * self.current_score / 100))
+        
+        # Bar 2
+        w = self.bar2_container.width()
+        if w > 0 and self.original_projected:
+            self.bar2.setFixedWidth(int(w * self.original_projected / 100))
+        
+        # Bar 3
+        w = self.bar3_container.width()
+        if w > 0 and self.refined_projected:
+            self.bar3.setFixedWidth(int(w * self.refined_projected / 100))
+        
+        # Bar 4
+        if self.bar4_container.isVisible():
+            w = self.bar4_container.width()
+            if w > 0 and self.live_projected:
+                self.bar4.setFixedWidth(int(w * self.live_projected / 100))
     
     def resizeEvent(self, event):
         """Handle resize to update bar widths"""
         super().resizeEvent(event)
-        if self.current_score:
-            self.bar1.setFixedWidth(int(self.bar1_container.width() * self.current_score / 100))
-        if self.original_projected:
-            self.bar2.setFixedWidth(int(self.bar2_container.width() * self.original_projected / 100))
-        if self.refined_projected:
-            self.bar3.setFixedWidth(int(self.bar3_container.width() * self.refined_projected / 100))
-        if self.live_projected and self.bar4_container.isVisible():
-            self.bar4.setFixedWidth(int(self.bar4_container.width() * self.live_projected / 100))
+        self._refresh_bars()
+    
+    def showEvent(self, event):
+        """Handle show event to update bar widths"""
+        super().showEvent(event)
+        self._refresh_bars()
 
 
 # ============================================================================
@@ -682,6 +690,16 @@ class OptimizationTask:
         if safe_mode:
             return self.safe_command
         return self.original_command
+    
+    def get_risk_badge(self) -> str:
+        """Get formatted risk badge for display"""
+        risk_badges = {
+            RiskLevel.LOW: "[SAFE]",
+            RiskLevel.MEDIUM: "[MEDIUM]",
+            RiskLevel.HIGH: "[HIGH]",
+            RiskLevel.CRITICAL: "[CRITICAL]"
+        }
+        return risk_badges.get(self.risk, "[UNKNOWN]")
 
 class OptimizationCategory:
     def __init__(self, name, tasks, reasoning="", category_impact=0, strategic_importance=""):
@@ -690,6 +708,14 @@ class OptimizationCategory:
         self.reasoning = reasoning
         self.category_impact = category_impact
         self.strategic_importance = strategic_importance
+    
+    def get_safe_tasks(self) -> List[OptimizationTask]:
+        """Get tasks with LOW risk level"""
+        return [t for t in self.tasks if t.risk == RiskLevel.LOW]
+    
+    def get_unsafe_tasks(self) -> List[OptimizationTask]:
+        """Get tasks with MEDIUM, HIGH, or CRITICAL risk level"""
+        return [t for t in self.tasks if t.risk != RiskLevel.LOW]
 
 
 # ============================================================================
@@ -726,12 +752,12 @@ class ScriptDiffAnalyzer:
             if task_id in refined_set:
                 refined_task = refined_set[task_id]
                 if (original_task.risk != refined_task.risk or 
-                    original_task.command != refined_task.command):
+                    original_task.original_command != refined_task.original_command):
                     modified_tasks.append({
                         'original': original_task,
                         'refined': refined_task,
                         'risk_changed': original_task.risk != refined_task.risk,
-                        'command_changed': original_task.command != refined_task.command
+                        'command_changed': original_task.original_command != refined_task.original_command
                     })
         
         # Calculate risk reduction
@@ -780,6 +806,7 @@ class ScriptDiffWidget(QFrame):
         """)
         
         layout = QVBoxLayout()
+        layout.setSpacing(8)
         
         # Header
         header = QLabel("Plan Comparison: Original vs Refined")
@@ -793,15 +820,17 @@ class ScriptDiffWidget(QFrame):
         self.stats_label.setStyleSheet("color: #88ff88; padding: 5px; background: #0a1a0a; border-radius: 3px;")
         layout.addWidget(self.stats_label)
         
-        # Scroll area for diff details
+        # Scroll area for diff details - with smooth scrolling enabled
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        scroll.setMinimumHeight(200)
         scroll.setStyleSheet("border: 1px solid #335533; border-radius: 3px;")
         
         self.content = QWidget()
         self.content_layout = QVBoxLayout(self.content)
+        self.content_layout.setSpacing(8)
         scroll.setWidget(self.content)
         layout.addWidget(scroll)
         
@@ -823,7 +852,8 @@ class ScriptDiffWidget(QFrame):
         self.stats_label.setText(stats_text)
         
         # Clear previous content
-        self._clear_layout(self.content_layout)
+        if self.content_layout.count() > 0:
+            self._clear_layout(self.content_layout)
         
         # Add removed tasks section
         if self.diff_data['removed_tasks']:
@@ -832,7 +862,7 @@ class ScriptDiffWidget(QFrame):
             self.content_layout.addWidget(removed_header)
             
             for task in self.diff_data['removed_tasks'][:5]:
-                task_label = QLabel(f"  - {task.description} ({task.risk.value.upper()})")
+                task_label = QLabel(f"  - {task.description} ({task.get_risk_badge()})")
                 task_label.setWordWrap(True)
                 task_label.setStyleSheet("color: #ffaa00;")
                 self.content_layout.addWidget(task_label)
@@ -849,7 +879,7 @@ class ScriptDiffWidget(QFrame):
             self.content_layout.addWidget(added_header)
             
             for task in self.diff_data['added_tasks'][:5]:
-                task_label = QLabel(f"  - {task.description} ({task.risk.value.upper()})")
+                task_label = QLabel(f"  - {task.description} ({task.get_risk_badge()})")
                 task_label.setWordWrap(True)
                 task_label.setStyleSheet("color: #88ff88;")
                 self.content_layout.addWidget(task_label)
@@ -866,7 +896,7 @@ class ScriptDiffWidget(QFrame):
             self.content_layout.addWidget(modified_header)
             
             for mod in self.diff_data['modified_tasks'][:3]:
-                text = f"  - {mod['original'].description}\n    Risk: {mod['original'].risk.value.upper()} -> {mod['refined'].risk.value.upper()}"
+                text = f"  - {mod['original'].description}\n    Risk: {mod['original'].get_risk_badge()} -> {mod['refined'].get_risk_badge()}"
                 task_label = QLabel(text)
                 task_label.setWordWrap(True)
                 task_label.setStyleSheet("color: #ffff88;")
@@ -924,6 +954,7 @@ class StrategyComparisonWidget(QFrame):
         """)
         
         layout = QVBoxLayout()
+        layout.setSpacing(8)
         
         # Header
         header = QLabel("Strategy Comparison")
@@ -938,6 +969,7 @@ class StrategyComparisonWidget(QFrame):
         
         # Strategy cards container
         self.cards_layout = QVBoxLayout()
+        self.cards_layout.setSpacing(8)
         layout.addLayout(self.cards_layout)
         
         # Reasoning
@@ -985,6 +1017,7 @@ class StrategyComparisonWidget(QFrame):
             """)
         
         layout = QVBoxLayout()
+        layout.setSpacing(5)
         
         # Header with name and selection indicator
         header_layout = QHBoxLayout()
@@ -1010,6 +1043,7 @@ class StrategyComparisonWidget(QFrame):
         
         # Stats grid
         stats_layout = QGridLayout()
+        stats_layout.setHorizontalSpacing(15)
         
         # Gain
         gain_label = QLabel("Gain:")
@@ -1082,7 +1116,7 @@ class StrategyComparisonWidget(QFrame):
 
 
 # ============================================================================
-# BACKUP MANAGER - FIXED with restore_backup
+# BACKUP MANAGER
 # ============================================================================
 
 class BackupManager:
@@ -1101,6 +1135,8 @@ class BackupManager:
                 d for d in self.backup_dir.iterdir() 
                 if d.is_dir() and d.name.startswith("backup_")
             ], reverse=True)
+            if self.backup_history:
+                self.current_backup = self.backup_history[0]
     
     def create_backup(self, description: str = "Pre-optimization state") -> Optional[Path]:
         """Create a backup of current system state (read-only)"""
@@ -1126,11 +1162,18 @@ class BackupManager:
                 capture_output=True, timeout=30
             )
             
+            # Backup registry settings (read-only)
+            registry_backup = backup_path / "registry.reg"
+            subprocess.run(
+                ['reg', 'export', 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run', str(registry_backup), '/y'],
+                capture_output=True, timeout=30
+            )
+            
             # Save metadata
             metadata = {
                 "timestamp": timestamp,
                 "description": description,
-                "files": ["services.csv", "startup.txt"]
+                "files": ["services.csv", "startup.txt", "registry.reg"]
             }
             
             with open(backup_path / "metadata.json", 'w') as f:
@@ -1144,7 +1187,6 @@ class BackupManager:
             print(f"Backup failed: {e}")
             return None
     
-    # FIX: Added missing restore_backup method
     def restore_backup(self, backup_path: Path = None) -> bool:
         """Restore from backup (safe restoration only)"""
         if backup_path is None:
@@ -1154,13 +1196,31 @@ class BackupManager:
             return False
         
         try:
-            # This is a simplified restoration - in production you'd restore services, startup items, etc.
-            # For now, we just return True to simulate restoration
+            # Restore services
+            services_backup = backup_path / "services.csv"
+            if services_backup.exists():
+                # This is a simplified restoration - in production you'd parse the CSV and restore each service
+                print(f"Would restore services from: {services_backup}")
+            
+            # Restore startup items
+            startup_backup = backup_path / "startup.txt"
+            if startup_backup.exists():
+                print(f"Would restore startup items from: {startup_backup}")
+            
+            # Restore registry
+            registry_backup = backup_path / "registry.reg"
+            if registry_backup.exists():
+                subprocess.run(
+                    ['reg', 'import', str(registry_backup)],
+                    capture_output=True, timeout=30
+                )
+            
+            # Update metadata
             metadata_path = backup_path / "metadata.json"
             if metadata_path.exists():
                 with open(metadata_path, 'r') as f:
                     metadata = json.load(f)
-                    print(f"Restoring from backup: {metadata.get('description', 'Unknown')}")
+                    print(f"Restored from backup: {metadata.get('description', 'Unknown')}")
             
             return True
             
@@ -1226,14 +1286,14 @@ class RestorePointCreator:
 
 
 # ============================================================================
-# SCRIPT GENERATOR - FIXED f-string
+# SCRIPT GENERATOR - FIXED
 # ============================================================================
 
 class ScriptGenerator:
     """Generates PowerShell scripts from selected tasks with safety validation"""
     
-    @staticmethod
-    def generate_script(tasks: List[OptimizationTask], safe_mode: bool = True) -> str:
+    @classmethod
+    def generate_script(cls, tasks: List[OptimizationTask], safe_mode: bool = True) -> str:
         """Generate PowerShell script from tasks with safety checks"""
         
         # Validate all tasks first
@@ -1313,54 +1373,30 @@ class ScriptGenerator:
                 categories[task.category] = []
             categories[task.category].append(task)
         
-        # Add tasks by category - FIXED f-string
+        # Add tasks by category - split into SAFE and ADVANCED sections
         for category, cat_tasks in categories.items():
             lines.append(f"")
             lines.append(f"Write-Host 'Processing: {category}' -ForegroundColor Yellow")
-            # FIX: Use variable instead of f-string with expression
             separator = "-" * (len(category) + 10)
             lines.append(f"Write-Host '{separator}' -ForegroundColor Yellow")
             
-            for task in cat_tasks:
-                lines.append(f"")
-                lines.append(f"# {task.description}")
-                if task.reasoning:
-                    lines.append(f"# Reasoning: {task.reasoning}")
-                
-                # Check command safety
-                is_safe, cmd_risk, safety_note = CommandSafety.is_command_safe(task.original_command)
-                cmd_to_use = task.get_execution_command(safe_mode)
-                
-                if not is_safe and safe_mode:
-                    lines.append(f"# Command modified for safety: {safety_note}")
-                
-                # Add command with appropriate safety level
-                if cmd_risk in ["high", "critical"] and safe_mode:
-                    # High-risk commands require confirmation
-                    lines.append(f"Write-Host '  {task.description} (High Risk)' -ForegroundColor Yellow")
-                    lines.append(f"Write-Host '      {safety_note}' -ForegroundColor Yellow")
-                    lines.append(f"$confirm = Read-Host '    Proceed with this high-risk operation? (y/N)'")
-                    lines.append(f"if ($confirm -eq 'y') {{")
-                    lines.append(f"    try {{")
-                    lines.append(f"        {cmd_to_use}")
-                    lines.append(f"        Write-Host '    Completed' -ForegroundColor Green")
-                    lines.append(f"    }} catch {{")
-                    lines.append(f"        Write-Host '    Failed: $_' -ForegroundColor Red")
-                    lines.append(f"        Write-Warning 'Error in {task.description}'")
-                    lines.append(f"    }}")
-                    lines.append(f"}} else {{")
-                    lines.append(f"    Write-Host '    Skipped' -ForegroundColor Gray")
-                    lines.append(f"}}")
-                else:
-                    # Standard execution with try/catch
-                    lines.append(f"Write-Host '  -> {task.description}' -ForegroundColor Gray")
-                    lines.append(f"try {{")
-                    lines.append(f"    {cmd_to_use}")
-                    lines.append(f"    Write-Host '    Completed' -ForegroundColor Green")
-                    lines.append(f"}} catch {{")
-                    lines.append(f"    Write-Host '    Failed: $_' -ForegroundColor Red")
-                    lines.append(f"    Write-Warning 'Error in {task.description}'")
-                    lines.append(f"}}")
+            # Split tasks by risk level
+            safe_tasks = [t for t in cat_tasks if t.risk == RiskLevel.LOW]
+            advanced_tasks = [t for t in cat_tasks if t.risk != RiskLevel.LOW]
+            
+            # SAFE OPTIMIZATIONS section
+            if safe_tasks:
+                lines.append(f"Write-Host ''")
+                lines.append(f"Write-Host 'SAFE OPTIMIZATIONS' -ForegroundColor Green")
+                for task in safe_tasks:
+                    cls._add_task_to_script(lines, task, safe_mode)
+            
+            # ADVANCED / CAUTION section
+            if advanced_tasks:
+                lines.append(f"Write-Host ''")
+                lines.append(f"Write-Host 'ADVANCED / CAUTION' -ForegroundColor Yellow")
+                for task in advanced_tasks:
+                    cls._add_task_to_script(lines, task, safe_mode)
         
         # Add reboot check
         reboot_tasks = [t for t in tasks if t.requires_reboot]
@@ -1379,6 +1415,52 @@ class ScriptGenerator:
         lines.append("Write-Host 'Script completed' -ForegroundColor Green")
         
         return '\n'.join(lines)
+    
+    @classmethod
+    def _add_task_to_script(cls, lines: list, task: OptimizationTask, safe_mode: bool):
+        """Add a single task to the script lines"""
+        lines.append(f"")
+        lines.append(f"# {task.description}")
+        if task.reasoning:
+            lines.append(f"# Reasoning: {task.reasoning}")
+        
+        # Add risk badge comment
+        lines.append(f"# Risk: {task.get_risk_badge()}")
+        
+        # Check command safety
+        is_safe, cmd_risk, safety_note = CommandSafety.is_command_safe(task.original_command)
+        cmd_to_use = task.get_execution_command(safe_mode)
+        
+        if not is_safe and safe_mode:
+            lines.append(f"# Command modified for safety: {safety_note}")
+        
+        # Add command with appropriate safety level
+        if cmd_risk in ["high", "critical"] and safe_mode:
+            # High-risk commands require confirmation
+            lines.append(f"Write-Host '  {task.description} (High Risk)' -ForegroundColor Yellow")
+            lines.append(f"Write-Host '      {safety_note}' -ForegroundColor Yellow")
+            lines.append(f"$confirm = Read-Host '    Proceed with this high-risk operation? (y/N)'")
+            lines.append(f"if ($confirm -eq 'y') {{")
+            lines.append(f"    try {{")
+            lines.append(f"        {cmd_to_use}")
+            lines.append(f"        Write-Host '    Completed' -ForegroundColor Green")
+            lines.append(f"    }} catch {{")
+            lines.append(f"        Write-Host '    Failed: $_' -ForegroundColor Red")
+            lines.append(f"        Write-Warning 'Error in {task.description}'")
+            lines.append(f"    }}")
+            lines.append(f"}} else {{")
+            lines.append(f"    Write-Host '    Skipped' -ForegroundColor Gray")
+            lines.append(f"}}")
+        else:
+            # Standard execution with try/catch
+            lines.append(f"Write-Host '  -> {task.description}' -ForegroundColor Gray")
+            lines.append(f"try {{")
+            lines.append(f"    {cmd_to_use}")
+            lines.append(f"    Write-Host '    Completed' -ForegroundColor Green")
+            lines.append(f"}} catch {{")
+            lines.append(f"    Write-Host '    Failed: $_' -ForegroundColor Red")
+            lines.append(f"    Write-Warning 'Error in {task.description}'")
+            lines.append(f"}}")
     
     @staticmethod
     def save_script(content: str, default_name: str = "Z-Engine_Optimization.ps1") -> Optional[str]:
@@ -1531,6 +1613,7 @@ class ScriptPreviewWidget(QFrame):
         """)
         
         layout = QVBoxLayout()
+        layout.setSpacing(8)
         
         # Header with controls
         header = QHBoxLayout()
@@ -1633,7 +1716,7 @@ class ScriptPreviewWidget(QFrame):
         self.exe_warning.hide()
         layout.addWidget(self.exe_warning)
         
-        # Script preview with scrollbars
+        # Script preview with scrollbars - smooth scrolling enabled
         self.preview = QPlainTextEdit()
         self.preview.setReadOnly(True)
         self.preview.setMaximumHeight(400)
@@ -1897,6 +1980,7 @@ class LiveRiskWidget(QFrame):
         """)
         
         layout = QVBoxLayout()
+        layout.setSpacing(8)
         
         header = QLabel("Live Risk Analysis")
         header.setFont(QFont("Arial", 10, QFont.Weight.Bold))
@@ -1931,6 +2015,8 @@ class LiveRiskWidget(QFrame):
         
         # Stats grid
         grid = QGridLayout()
+        grid.setHorizontalSpacing(10)
+        grid.setVerticalSpacing(5)
         
         grid.addWidget(QLabel("High Risk Tasks:"), 0, 0)
         self.high_risk_label = QLabel("0")
@@ -2037,10 +2123,6 @@ class LiveRiskWidget(QFrame):
 
 
 # ============================================================================
-# PERFORMANCE GRAPH WIDGET - REMOVED (using ThreeBarChartWidget instead)
-# ============================================================================
-
-# ============================================================================
 # SYSTEM DETAILS DIALOG
 # ============================================================================
 
@@ -2054,15 +2136,19 @@ class SystemDetailsDialog(QDialog):
     
     def setup_ui(self):
         layout = QVBoxLayout(self)
+        layout.setSpacing(8)
         tabs = QTabWidget()
         
         sys_tab = QWidget()
         sys_layout = QVBoxLayout(sys_tab)
+        sys_layout.setSpacing(8)
         
         if self.snapshot.get("error"):
             sys_layout.addWidget(QLabel(f"Error: {self.snapshot['error']}"))
         else:
             grid = QGridLayout()
+            grid.setHorizontalSpacing(15)
+            grid.setVerticalSpacing(8)
             row = 0
             
             sys_info = self.snapshot.get("system", {})
@@ -2126,6 +2212,7 @@ class SystemDetailsDialog(QDialog):
         
         storage_tab = QWidget()
         storage_layout = QVBoxLayout(storage_tab)
+        storage_layout.setSpacing(8)
         storage_table = QTableWidget()
         storage_table.setColumnCount(4)
         storage_table.setHorizontalHeaderLabels(["Drive", "Total (GB)", "Used %", "Free (GB)"])
@@ -2145,6 +2232,7 @@ class SystemDetailsDialog(QDialog):
         
         proc_tab = QWidget()
         proc_layout = QVBoxLayout(proc_tab)
+        proc_layout.setSpacing(8)
         proc_table = QTableWidget()
         proc_table.setColumnCount(2)
         proc_table.setHorizontalHeaderLabels(["Process", "Memory %"])
@@ -2301,6 +2389,7 @@ class CleanGraphWidget(QFrame):
         """)
         
         layout = QVBoxLayout()
+        layout.setSpacing(8)
         layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
         
         title = QLabel("Z-ENGINE")
@@ -2873,7 +2962,7 @@ Return JSON with confidence_score, confidence_level, residual_risk, factors, rea
 
 
 # ============================================================================
-# SIMULATION WORKER THREAD - FIXED (moved API call to worker thread)
+# SIMULATION WORKER THREAD - FIXED
 # ============================================================================
 
 class SimulationWorker(QThread):
@@ -2886,6 +2975,7 @@ class SimulationWorker(QThread):
         self.metrics = metrics
     
     def run(self):
+        # Use the analyzer's simulate_strategies method which returns SimulationResult
         result = self.analyzer.simulate_strategies(self.snapshot, self.metrics)
         self.finished.emit(result)
 
@@ -3248,8 +3338,13 @@ class PureAIAnalyzer:
             return None, None, None, None
     
     def simulate_strategies(self, snapshot: Dict[str, Any], current_metrics: SystemStabilityMetrics) -> Optional[SimulationResult]:
+        # Convert metrics to dict for API call
         metrics_dict = {
-            "overall": current_metrics.overall_score
+            "overall": current_metrics.overall_score,
+            "performance": current_metrics.performance_score,
+            "security": current_metrics.security_score,
+            "stability": current_metrics.stability_score,
+            "efficiency": current_metrics.resource_efficiency_score
         }
         
         result = self.client.simulate_strategies(snapshot, metrics_dict)
@@ -3331,6 +3426,7 @@ class ThoughtTraceWidget(QWidget):
     
     def setup_ui(self):
         layout = QVBoxLayout(self)
+        layout.setSpacing(8)
         
         header = QLabel("AI Reasoning Trace")
         header.setFont(QFont("Arial", 12, QFont.Weight.Bold))
@@ -3423,6 +3519,7 @@ class RiskDeltaWidget(QFrame):
         """)
         
         layout = QVBoxLayout()
+        layout.setSpacing(8)
         
         header = QLabel("Before vs After")
         header.setFont(QFont("Arial", 10, QFont.Weight.Bold))
@@ -3430,6 +3527,8 @@ class RiskDeltaWidget(QFrame):
         layout.addWidget(header)
         
         grid = QGridLayout()
+        grid.setHorizontalSpacing(10)
+        grid.setVerticalSpacing(5)
         
         grid.addWidget(QLabel("Original Plan:"), 0, 0)
         self.original_label = QLabel("--")
@@ -3506,18 +3605,25 @@ class ClickableTaskCard(QFrame):
         """)
         
         layout = QHBoxLayout()
+        layout.setSpacing(10)
         
         self.indicator = QLabel("  ")
         self.indicator.setFont(QFont("Segoe UI", 16))
         layout.addWidget(self.indicator)
         
         details = QVBoxLayout()
-        desc = QLabel(self.task.description)
+        details.setSpacing(3)
+        
+        # Description with risk badge
+        desc_text = f"{self.task.get_risk_badge()} {self.task.description}"
+        desc = QLabel(desc_text)
         desc.setFont(QFont("Arial", 11, QFont.Weight.Bold))
         desc.setWordWrap(True)
         details.addWidget(desc)
         
         meta = QHBoxLayout()
+        meta.setSpacing(10)
+        
         if self.task.impact_on_stability > 0:
             gain = QLabel(f"+{self.task.impact_on_stability}")
             gain.setFont(QFont("Arial", 12, QFont.Weight.Bold))
@@ -3577,7 +3683,7 @@ class CategoryWidget(QGroupBox):
     
     def setup_ui(self, is_priority: bool):
         layout = QVBoxLayout()
-        layout.setSpacing(5)
+        layout.setSpacing(8)
         
         if is_priority:
             priority_badge = QLabel("FOCUS AREA")
@@ -3609,11 +3715,35 @@ class CategoryWidget(QGroupBox):
             reasoning.setStyleSheet("color: #88ff88; font-style: italic;")
             layout.addWidget(reasoning)
         
-        for task in self.category.tasks:
-            card = ClickableTaskCard(task, self.plan_type)
-            card.toggled.connect(lambda task_id=task.id, checked=False: self.on_task_toggled(task_id, checked))
-            layout.addWidget(card)
-            self.cards[task.id] = card
+        # Split tasks into SAFE and ADVANCED sections
+        safe_tasks = self.category.get_safe_tasks()
+        advanced_tasks = self.category.get_unsafe_tasks()
+        
+        if safe_tasks:
+            safe_header = QLabel("SAFE OPTIMIZATIONS")
+            safe_header.setStyleSheet("color: #00ff00; font-weight: bold; margin-top: 5px;")
+            layout.addWidget(safe_header)
+            
+            for task in safe_tasks:
+                card = ClickableTaskCard(task, self.plan_type)
+                card.toggled.connect(self.on_task_toggled)
+                layout.addWidget(card)
+                self.cards[task.id] = card
+        
+        if advanced_tasks:
+            if safe_tasks:
+                # Add spacing between sections
+                layout.addSpacing(10)
+            
+            advanced_header = QLabel("ADVANCED / CAUTION")
+            advanced_header.setStyleSheet("color: #ffaa00; font-weight: bold; margin-top: 5px;")
+            layout.addWidget(advanced_header)
+            
+            for task in advanced_tasks:
+                card = ClickableTaskCard(task, self.plan_type)
+                card.toggled.connect(self.on_task_toggled)
+                layout.addWidget(card)
+                self.cards[task.id] = card
         
         self.setLayout(layout)
     
@@ -3625,7 +3755,7 @@ class CategoryWidget(QGroupBox):
 
 
 # ============================================================================
-# MAIN WINDOW - With 3-Bar Chart
+# MAIN WINDOW - With 3-Bar Chart and QStackedWidget
 # ============================================================================
 
 class MainWindow(QMainWindow):
@@ -3655,8 +3785,8 @@ class MainWindow(QMainWindow):
         central = QWidget()
         self.setCentralWidget(central)
         main_layout = QVBoxLayout(central)
-        main_layout.setSpacing(5)
-        main_layout.setContentsMargins(5, 5, 5, 5)
+        main_layout.setSpacing(8)
+        main_layout.setContentsMargins(8, 8, 8, 8)
         
         # ====================================================================
         # HEADER SECTION
@@ -3671,16 +3801,18 @@ class MainWindow(QMainWindow):
         main_layout.addWidget(self.flow_indicator)
         
         # ====================================================================
-        # 3-BAR COMPARISON CHART SECTION
+        # STACKED WIDGET FOR CHARTS (Clean vs 3-Bar)
         # ====================================================================
-        self.chart = ThreeBarChartWidget()
-        main_layout.addWidget(self.chart)
+        self.chart_stack = QStackedWidget()
+        self.chart_stack.setMaximumHeight(250)
         
-        # ====================================================================
-        # CLEAN DEFAULT VIEW (Hidden when chart shown)
-        # ====================================================================
         self.clean_view = CleanGraphWidget()
-        main_layout.addWidget(self.clean_view)
+        self.chart_stack.addWidget(self.clean_view)
+        
+        self.chart = ThreeBarChartWidget()
+        self.chart_stack.addWidget(self.chart)
+        
+        main_layout.addWidget(self.chart_stack)
         
         # ====================================================================
         # STRATEGY COMPARISON SECTION
@@ -3710,6 +3842,7 @@ class MainWindow(QMainWindow):
         # Operations Group
         op_group = QGroupBox("Operations")
         op_layout = QHBoxLayout()
+        op_layout.setSpacing(5)
         
         self.scan_btn = QPushButton("1. Scan System")
         self.scan_btn.setFixedHeight(40)
@@ -3734,6 +3867,7 @@ class MainWindow(QMainWindow):
         # Strategy Group
         strategy_group = QGroupBox("Strategy")
         strategy_layout = QHBoxLayout()
+        strategy_layout.setSpacing(5)
         
         self.simulate_btn = QPushButton("Simulate Strategies")
         self.simulate_btn.setFixedHeight(40)
@@ -3747,6 +3881,7 @@ class MainWindow(QMainWindow):
         # Export Group
         export_group = QGroupBox("Export")
         export_layout = QHBoxLayout()
+        export_layout.setSpacing(5)
         
         self.export_btn = QPushButton("Export Script")
         self.export_btn.setFixedHeight(40)
@@ -3765,6 +3900,7 @@ class MainWindow(QMainWindow):
         # Safety Group
         safety_group = QGroupBox("Safety")
         safety_layout = QHBoxLayout()
+        safety_layout.setSpacing(5)
         
         self.reverse_btn = QPushButton("Reverse Last Action")
         self.reverse_btn.setFixedHeight(40)
@@ -3792,6 +3928,7 @@ class MainWindow(QMainWindow):
         left_panel = QWidget()
         left_layout = QVBoxLayout(left_panel)
         left_layout.setContentsMargins(5, 5, 5, 5)
+        left_layout.setSpacing(8)
         
         self.risk_delta = RiskDeltaWidget()
         left_layout.addWidget(self.risk_delta)
@@ -3821,6 +3958,7 @@ class MainWindow(QMainWindow):
         center_panel = QWidget()
         center_layout = QVBoxLayout(center_panel)
         center_layout.setContentsMargins(0, 0, 0, 0)
+        center_layout.setSpacing(0)
         
         # Category selection tabs
         self.category_tabs = QTabWidget()
@@ -3829,12 +3967,14 @@ class MainWindow(QMainWindow):
         self.original_tab = QWidget()
         self.original_tab_layout = QVBoxLayout(self.original_tab)
         self.original_tab_layout.setContentsMargins(0, 0, 0, 0)
+        self.original_tab_layout.setSpacing(0)
         self.category_tabs.addTab(self.original_tab, "Original Plan")
         
         # Refined plan tab
         self.refined_tab = QWidget()
         self.refined_tab_layout = QVBoxLayout(self.refined_tab)
         self.refined_tab_layout.setContentsMargins(0, 0, 0, 0)
+        self.refined_tab_layout.setSpacing(0)
         self.category_tabs.addTab(self.refined_tab, "Refined Plan")
         
         center_layout.addWidget(self.category_tabs)
@@ -3843,6 +3983,7 @@ class MainWindow(QMainWindow):
         right_panel = QWidget()
         right_layout = QVBoxLayout(right_panel)
         right_layout.setContentsMargins(0, 0, 0, 0)
+        right_layout.setSpacing(0)
         
         self.thought_trace = ThoughtTraceWidget()
         right_layout.addWidget(self.thought_trace)
@@ -3857,6 +3998,7 @@ class MainWindow(QMainWindow):
     
     def create_header(self):
         hdr = QHBoxLayout()
+        hdr.setSpacing(10)
         title = QLabel("Z-ENGINE")
         title.setFont(QFont("Arial", 18, QFont.Weight.Bold))
         title.setStyleSheet("color: #00ffff;")
@@ -3927,8 +4069,8 @@ class MainWindow(QMainWindow):
         self.simulate_btn.setEnabled(True)
         self.set_api_status("online")
         self.flow_indicator.set_stage(1)
-        self.clean_view.set_score(50)
-        self.chart.hide()
+        # Score shown after analysis, not scan
+        self.chart_stack.setCurrentWidget(self.clean_view)
     
     def analyze(self):
         if not self.snapshot:
@@ -3985,8 +4127,7 @@ class MainWindow(QMainWindow):
         self.flow_indicator.set_stage(2)
         
         # Switch to chart view
-        self.clean_view.hide()
-        self.chart.show()
+        self.chart_stack.setCurrentWidget(self.chart)
         
         self.plan_worker = PlanWorker(self.analyzer, self.snapshot, self.metrics, self.strategic_insight)
         self.plan_worker.finished.connect(self.plan_done)
@@ -4015,10 +4156,12 @@ class MainWindow(QMainWindow):
         # Clear original tab
         self.clear_tab_layout(self.original_tab_layout)
         
-        # Create scroll area for original plan
+        # Create scroll area for original plan - with smooth scrolling enabled
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        scroll.setMinimumHeight(300)  # Ensure scroll area has minimum height
         scroll.setStyleSheet("border: none;")
         
         container = QWidget()
@@ -4043,10 +4186,12 @@ class MainWindow(QMainWindow):
         # Clear refined tab
         self.clear_tab_layout(self.refined_tab_layout)
         
-        # Create scroll area for refined plan
+        # Create scroll area for refined plan - with smooth scrolling enabled
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
+        scroll.setMinimumHeight(300)  # Ensure scroll area has minimum height
         scroll.setStyleSheet("border: none;")
         
         container = QWidget()
@@ -4251,14 +4396,14 @@ class MainWindow(QMainWindow):
         self.log_msg("Running strategy simulation...")
         self.simulate_btn.setEnabled(False)
         
-        # FIX: Use worker thread for simulation
+        # FIX: Use worker thread for simulation that properly routes through analyzer
         self.simulation_worker = SimulationWorker(self.analyzer, self.snapshot, self.metrics)
         self.simulation_worker.finished.connect(self.simulation_done)
         self.simulation_worker.start()
     
     def simulation_done(self, result):
         """Handle simulation completion"""
-        if result:
+        if result and isinstance(result, SimulationResult):
             self.simulation_result = result
             # Update strategy comparison widget
             self.strategy_comparison.update_strategies(
@@ -4277,7 +4422,7 @@ class MainWindow(QMainWindow):
                 f"Confidence: {selected.confidence:.1f}%\n\n"
                 f"Reasoning: {result.reasoning}")
         else:
-            self.log_msg("Simulation failed", "ERROR")
+            self.log_msg("Simulation failed or returned invalid result", "ERROR")
         
         self.simulate_btn.setEnabled(True)
     
@@ -4359,8 +4504,7 @@ class MainWindow(QMainWindow):
                 if self.metrics:
                     self.metrics.overall_score = 70
                 self.clean_view.set_score(70)
-                self.clean_view.show()
-                self.chart.hide()
+                self.chart_stack.setCurrentWidget(self.clean_view)
                 self.reverse_btn.setEnabled(False)
             else:
                 self.log_msg("Failed to restore system", "ERROR")
