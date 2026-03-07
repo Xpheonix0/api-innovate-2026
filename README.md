@@ -108,7 +108,7 @@ The system analyzes environment state, generates strategies, critiques its own r
 This multi-pass architecture demonstrates how AI models can function as autonomous decision systems capable of analyzing complex environments and producing controlled operational outcomes.
 
 
-                                                                                                                               ||   Made by Dipanjan Dutta solo project  ||
-                                                                       |===============================|
-                                                                        For Api Innovate 2026 Hackathon
-                                                                       |===============================|
+                                                  ||   Made by Dipanjan Dutta solo project  ||
+                           |===============================|
+                            For Api Innovate 2026 Hackathon
+                           |===============================|
