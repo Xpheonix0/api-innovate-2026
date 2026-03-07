@@ -1,6 +1,7 @@
---==========|
+==========|
 1. Problem
---==========|
+   
+==========|
 
 Modern operating systems produce extensive telemetry including CPU load, memory pressure, storage utilization, and process activity. However, most optimization tools rely on predefined tuning rules that do not account for real system conditions.
 
