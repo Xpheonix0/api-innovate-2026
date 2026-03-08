@@ -96,7 +96,7 @@ PowerShell scripting
 ======================|
 
 git clone https://github.com/Xpheonix0/Z-Engine
-cd api-innovate-2026
+cd Z-Engine
 
 pip install -r requirements.txt
 python main.py
