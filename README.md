@@ -86,7 +86,6 @@ Python
 PySide6
 psutil
 ASI-1 API
-matplotlib
 PowerShell scripting
 
 ======================|
