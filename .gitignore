@@ -1,0 +1,36 @@
+# Python cache files
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Virtual environments
+venv/
+env/
+.env/
+.venv/
+
+# API keys and config (IMPORTANT - never commit these)
+.env
+*.env
+config.json
+~/.zengine/
+
+# Z-Engine specific
+Z-Engine_Backups/
+*.ps1
+
+# IDE files
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+*.txt.log
