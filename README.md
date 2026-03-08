@@ -96,15 +96,21 @@ PowerShell scripting
 ======================|
 
 git clone https://github.com/Xpheonix0/Z-Engine
+
 cd Z-Engine
+
 pip install -r requirements.txt
 
 --- Windows ---
+
 set ASI_API_KEY=your-api-key-here
+
 python main.py
 
 --- Linux / Mac ---
+
 export ASI_API_KEY=your-api-key-here
+
 python main.py
 
 To get an ASI-1 API key, visit: https://asi1.ai
