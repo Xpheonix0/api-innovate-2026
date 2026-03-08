@@ -193,6 +193,7 @@ class ThoughtTraceWidget(QWidget):
     
     def __init__(self):
         super().__init__()
+        # Add this line right after super().__init__()
         self.setWindowFlags(Qt.WindowType.Window)
         self.setup_ui()
     
