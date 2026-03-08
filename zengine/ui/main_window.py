@@ -628,7 +628,8 @@ class MainWindow(QMainWindow):
     
     def _confidence_done(self, assessment):
         if assessment:
-            self.confidence_score = assessment.confidence_score
+            # Wrap with min(100, ...) to cap at 100
+            self.confidence_score = min(100, assessment.confidence_score)
         else:
             # Cap confidence at 100
             self.confidence_score = min(100, 85 + (self.risk_reduction / 2 if self.risk_reduction else 0))
@@ -770,6 +771,7 @@ class MainWindow(QMainWindow):
         return selected
     
     def _simulate_strategies(self):
+        # Add this check at the very top
         if not self.snapshot or not self.metrics:
             QMessageBox.information(self, "Cannot Simulate", "Please scan and analyze the system first")
             return
