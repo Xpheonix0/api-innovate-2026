@@ -7,7 +7,30 @@ import uuid
 from typing import Dict, List, Any, Optional
 from enum import Enum
 
-from zengine.safety import RiskLevel
+
+class RiskLevel(Enum):
+    LOW = "low"
+    MEDIUM = "medium"
+    HIGH = "high"
+    CRITICAL = "critical"
+    
+    @classmethod
+    def from_value(cls, value):
+        if isinstance(value, cls):
+            return value
+        try:
+            return cls(str(value).lower())
+        except ValueError:
+            return cls.LOW
+    
+    def get_color(self) -> str:
+        colors = {
+            RiskLevel.LOW: "#00ff00",
+            RiskLevel.MEDIUM: "#ffff00",
+            RiskLevel.HIGH: "#ff8800",
+            RiskLevel.CRITICAL: "#ff0000"
+        }
+        return colors.get(self, "#ffffff")
 
 
 class SystemStabilityMetrics:
