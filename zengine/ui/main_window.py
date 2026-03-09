@@ -701,7 +701,6 @@ class MainWindow(QMainWindow):
         self._clear_tab_layout(self.refined_tab_layout)
     
     def _selection_changed(self):
-        # Don't update if metrics are not available yet
         if not self.metrics:
             return
         
@@ -711,6 +710,16 @@ class MainWindow(QMainWindow):
             impact = sum(t.impact_on_stability for t in selected)
             self.status.setText(f"Selected {len(selected)} tasks (impact: +{impact})")
             
+            is_refined = self.category_tabs.currentIndex() == 1
+            self.live_risk.setStyleSheet("""
+                QFrame {
+                    border: 2px solid %s;
+                    border-radius: 5px;
+                    background: %s;
+                    margin: 5px;
+                }
+            """ % ("#00ffff" if is_refined else "#ffaa00",
+                   "#001122" if is_refined else "#221100"))
             self.live_risk.update_risk(selected, self.metrics.overall_score)
             
             if self.metrics:
