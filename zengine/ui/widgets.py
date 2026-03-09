@@ -100,10 +100,7 @@ class ClickableTaskCard(QFrame):
             refined_badge.setStyleSheet("background: #00ffff; color: black; font-weight: bold; padding: 2px 4px; border-radius: 3px;")
             meta.addWidget(refined_badge)
         
-        if self.task.is_safe:
-            safe_badge = QLabel(" SAFE ")
-            safe_badge.setStyleSheet("background: #00ff00; color: black; font-weight: bold; padding: 2px 4px; border-radius: 3px;")
-            meta.addWidget(safe_badge)
+     
         
         meta.addStretch()
         details.addLayout(meta)
