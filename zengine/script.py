@@ -11,8 +11,8 @@ from typing import List, Optional
 
 from PySide6.QtWidgets import QMessageBox, QFileDialog
 
-from zengine.models import OptimizationTask
-from zengine.safety import CommandSafety, RiskLevel
+from zengine.safety import CommandSafety
+from zengine.models import RiskLevel
 
 
 class ScriptGenerator:
