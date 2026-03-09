@@ -129,7 +129,6 @@ class ScriptGenerator:
         is_safe, cmd_risk, safety_note = CommandSafety.is_command_safe(task.original_command)
         cmd_to_use = task.get_execution_command(safe_mode)
         
-        # Sanitize the command for embedding in PowerShell string
         cmd_to_use = cmd_to_use.replace('"', '`"').replace('$', '`$')
         
         if not is_safe and safe_mode:
@@ -168,7 +167,6 @@ class ScriptGenerator:
             default_name,
             "PowerShell Scripts (*.ps1);;All Files (*)"
         )
-        
         if file_path:
             try:
                 with open(file_path, 'w', encoding='utf-8') as f:
@@ -185,7 +183,6 @@ class ScriptRunner:
     
     @staticmethod
     def _escape_path_for_powershell(path: str) -> str:
-        """Escape a file path for safe use in PowerShell command"""
         escaped = path.replace('\\', '\\\\')
         escaped = escaped.replace('"', '`"')
         return escaped
@@ -195,11 +192,9 @@ class ScriptRunner:
         if os.name != 'nt':
             QMessageBox.critical(parent_widget, "Error", "PowerShell scripts can only run on Windows systems")
             return False
-        
         if not os.path.exists(script_path):
             QMessageBox.critical(parent_widget, "Error", f"Script not found: {script_path}")
             return False
-        
         if any(c in script_path for c in [';', '&', '|', '`', '$']):
             QMessageBox.critical(parent_widget, "Error", "Invalid script path contains dangerous characters")
             return False
@@ -213,7 +208,6 @@ class ScriptRunner:
             "Continue?",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
         )
-        
         if reply != QMessageBox.StandardButton.Yes:
             return False
         
@@ -225,7 +219,6 @@ class ScriptRunner:
                 "-Command",
                 f'Start-Process powershell.exe -Verb RunAs -ArgumentList \'-NoProfile -ExecutionPolicy Bypass -File "{script_path}"\''
             ])
-            
             QMessageBox.information(
                 parent_widget,
                 "Script Started",
@@ -233,7 +226,6 @@ class ScriptRunner:
                 "Check the PowerShell window for progress and any prompts."
             )
             return True
-            
         except Exception as e:
             QMessageBox.critical(parent_widget, "Error", f"Failed to start script: {e}")
             return False
@@ -244,15 +236,66 @@ class ScriptRunner:
             temp_dir = tempfile.gettempdir()
             timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
             script_path = os.path.join(temp_dir, f"Z-Engine_{timestamp}.ps1")
-            
             if not os.path.abspath(script_path).startswith(os.path.abspath(temp_dir)):
                 print("Error: Script path would escape temp directory")
                 return None
-            
             with open(script_path, 'w', encoding='utf-8') as f:
                 f.write(content)
-            
             return script_path
         except Exception as e:
             print(f"Failed to create temp script: {e}")
             return None
+
+
+class LiveRiskCalculator:
+    """Calculates real-time risk based on selected tasks"""
+    
+    @staticmethod
+    def calculate_risk(tasks, base_score: int) -> dict:
+        if not tasks:
+            return {
+                "total_risk": 0, "risk_level": "None",
+                "high_risk_tasks": 0, "unsafe_commands": 0,
+                "exe_missing": 0, "reboot_required": False,
+                "stability_impact": 0, "confidence": 100
+            }
+        
+        risk_counts = {
+            RiskLevel.LOW: sum(1 for t in tasks if t.risk == RiskLevel.LOW),
+            RiskLevel.MEDIUM: sum(1 for t in tasks if t.risk == RiskLevel.MEDIUM),
+            RiskLevel.HIGH: sum(1 for t in tasks if t.risk == RiskLevel.HIGH),
+            RiskLevel.CRITICAL: sum(1 for t in tasks if t.risk == RiskLevel.CRITICAL)
+        }
+        risk_weights = {RiskLevel.LOW: 1, RiskLevel.MEDIUM: 3, RiskLevel.HIGH: 6, RiskLevel.CRITICAL: 10}
+        total_weight = sum(risk_counts[r] * risk_weights[r] for r in risk_counts)
+        max_possible = len(tasks) * 10
+        risk_percentage = (total_weight / max_possible * 100) if max_possible > 0 else 0
+        unsafe_commands = sum(1 for t in tasks if not CommandSafety.is_command_safe(t.original_command)[0])
+        risk_percentage = min(100, risk_percentage + (unsafe_commands * 5))
+        
+        if risk_percentage < 20: risk_level = "Very Low"
+        elif risk_percentage < 40: risk_level = "Low"
+        elif risk_percentage < 60: risk_level = "Medium"
+        elif risk_percentage < 80: risk_level = "High"
+        else: risk_level = "Critical"
+        
+        total_impact = sum(t.impact_on_stability for t in tasks)
+        if base_score >= 100:
+            gain = 0
+        else:
+            room = 100 - base_score
+            gain = min(room, int(total_impact * (room / 100)))
+        confidence = max(0, min(100, 100 - risk_percentage))
+        
+        return {
+            "total_risk": round(risk_percentage, 1),
+            "risk_level": risk_level,
+            "risk_counts": risk_counts,
+            "high_risk_tasks": risk_counts[RiskLevel.HIGH] + risk_counts[RiskLevel.CRITICAL],
+            "unsafe_commands": unsafe_commands,
+            "exe_missing": 0,
+            "reboot_required": any(t.requires_reboot for t in tasks),
+            "stability_impact": gain,
+            "projected_score": min(100, base_score + gain),
+            "confidence": round(confidence, 1)
+        }
