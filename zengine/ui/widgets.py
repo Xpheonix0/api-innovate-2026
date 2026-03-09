@@ -76,7 +76,7 @@ class ClickableTaskCard(QFrame):
             meta.addWidget(gain)
             meta.addWidget(QLabel("stability"))
         
-        if not self.task.is_safe:
+     if self.task.risk in [RiskLevel.HIGH, RiskLevel.CRITICAL]:
             warning = QLabel(" UNSAFE ")
             warning.setStyleSheet("background: #ff0000; color: white; font-weight: bold; padding: 2px 4px; border-radius: 3px;")
             meta.addWidget(warning)
