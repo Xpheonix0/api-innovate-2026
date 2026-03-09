@@ -23,7 +23,6 @@ from zengine.models import (
     SimulationResult, RiskLevel, OptimizationCategory,
     OptimizationTask
 )
-from zengine.script import LiveRiskCalculator
 from zengine.workers import (
     ScanWorker, AnalyzeWorker, InsightWorker, PlanWorker,
     CritiqueWorker, RegenerateWorker, SimulationWorker, ConfidenceWorker
