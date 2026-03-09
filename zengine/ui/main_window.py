@@ -7,7 +7,7 @@ import os
 import threading
 from typing import List, Optional
 from zengine.safety import CommandSafety
-from zengine.script import ScriptGenerator
+from zengine.script import ScriptGenerator, LiveRiskCalculator
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QSplitter,
     QLabel, QPushButton, QGroupBox, QTabWidget, QScrollArea,
@@ -892,83 +892,3 @@ class MainWindow(QMainWindow):
         if self.thought_trace_widget:
             self.thought_trace_widget.close()
         event.accept()
-
-
-# Utility class for risk calculation
-class LiveRiskCalculator:
-    """Calculates real-time risk based on selected tasks"""
-    
-    @staticmethod
-    def calculate_risk(tasks: List[OptimizationTask], base_score: int) -> dict:
-        if not tasks:
-            return {
-                "total_risk": 0,
-                "risk_level": "None",
-                "high_risk_tasks": 0,
-                "unsafe_commands": 0,
-                "exe_missing": 0,
-                "reboot_required": False,
-                "stability_impact": 0,
-                "confidence": 100
-            }
-        
-        risk_counts = {
-            RiskLevel.LOW: sum(1 for t in tasks if t.risk == RiskLevel.LOW),
-            RiskLevel.MEDIUM: sum(1 for t in tasks if t.risk == RiskLevel.MEDIUM),
-            RiskLevel.HIGH: sum(1 for t in tasks if t.risk == RiskLevel.HIGH),
-            RiskLevel.CRITICAL: sum(1 for t in tasks if t.risk == RiskLevel.CRITICAL)
-        }
-        
-        unsafe_commands = 0
-        for task in tasks:
-            is_safe, _, _ = CommandSafety.is_command_safe(task.original_command)
-            if not is_safe:
-                unsafe_commands += 1
-        
-        risk_weights = {
-            RiskLevel.LOW: 1,
-            RiskLevel.MEDIUM: 3,
-            RiskLevel.HIGH: 6,
-            RiskLevel.CRITICAL: 10
-        }
-        
-        total_weight = sum(risk_counts[r] * risk_weights[r] for r in risk_counts)
-        max_possible = len(tasks) * 10
-        risk_percentage = (total_weight / max_possible * 100) if max_possible > 0 else 0
-        
-        risk_percentage = min(100, risk_percentage + (unsafe_commands * 5))
-        
-        if risk_percentage < 20:
-            risk_level = "Very Low"
-        elif risk_percentage < 40:
-            risk_level = "Low"
-        elif risk_percentage < 60:
-            risk_level = "Medium"
-        elif risk_percentage < 80:
-            risk_level = "High"
-        else:
-            risk_level = "Critical"
-        
-        total_impact = sum(t.impact_on_stability for t in tasks)
-        
-        # Fix: Handle case where base_score is already 100
-        if base_score >= 100:
-            gain = 0
-        else:
-            room = 100 - base_score
-            gain = min(room, int(total_impact * (room / 100)))
-        
-        confidence = max(0, min(100, 100 - risk_percentage))
-        
-        return {
-            "total_risk": round(risk_percentage, 1),
-            "risk_level": risk_level,
-            "risk_counts": risk_counts,
-            "high_risk_tasks": risk_counts[RiskLevel.HIGH] + risk_counts[RiskLevel.CRITICAL],
-            "unsafe_commands": unsafe_commands,
-            "exe_missing": 0,
-            "reboot_required": any(t.requires_reboot for t in tasks),
-            "stability_impact": gain,
-            "projected_score": min(100, base_score + gain),
-            "confidence": round(confidence, 1)
-        }
