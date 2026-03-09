@@ -2,10 +2,13 @@
 Reusable UI widgets for Z-Engine
 """
 
+import datetime
+import os
+
 from PySide6.QtWidgets import (
     QFrame, QLabel, QHBoxLayout, QVBoxLayout, QGridLayout,
     QPushButton, QCheckBox, QProgressBar, QPlainTextEdit,
-    QGroupBox, QScrollArea, QToolBox, QWidget
+    QGroupBox, QScrollArea, QToolBox, QWidget, QMessageBox
 )
 from PySide6.QtCore import Qt, Signal, QTimer
 from PySide6.QtGui import QFont
@@ -278,7 +281,6 @@ class LiveRiskWidget(QFrame):
         grid.addWidget(self.confidence_label, 4, 1)
         
         layout.addLayout(grid)
-        
         self.setLayout(layout)
     
     def update_risk(self, tasks: list, base_score: int):
@@ -406,7 +408,7 @@ class RiskDeltaWidget(QFrame):
         
         self.setLayout(layout)
     
-    def update_delta(self, original: int, refined: int, risk_reduction: float, 
+    def update_delta(self, original: int, refined: int, risk_reduction: float,
                     confidence: float, improvements: list):
         self.original_label.setText(f"{original}")
         self.refined_label.setText(f"{refined}")
@@ -654,16 +656,19 @@ class CleanGraphWidget(QFrame):
         title = QLabel("Z-ENGINE")
         title.setFont(QFont("Arial", 18, QFont.Weight.Bold))
         title.setStyleSheet("color: #00ffff;")
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(title)
         
         subtitle = QLabel("Generates · Engineers · Deploys")
         subtitle.setFont(QFont("Arial", 10))
         subtitle.setStyleSheet("color: #88ff88;")
+        subtitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(subtitle)
         
         self.score_label = QLabel("--")
         self.score_label.setFont(QFont("Arial", 36, QFont.Weight.Bold))
         self.score_label.setStyleSheet("color: #00ff00; padding: 5px;")
+        self.score_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(self.score_label)
         
         self.setLayout(layout)
@@ -1048,23 +1053,19 @@ class ThreeBarChartWidget(QFrame):
         # Bar 1 - Current Score
         bar1_layout = QHBoxLayout()
         bar1_layout.addWidget(QLabel("Current"), 1)
-        
         self.bar1_container = QWidget()
         self.bar1_container.setMinimumHeight(25)
         self.bar1_container.setStyleSheet("background: #2a2a2a; border-radius: 3px;")
         bar1_container_layout = QHBoxLayout(self.bar1_container)
         bar1_container_layout.setContentsMargins(0, 0, 0, 0)
-        
         self.bar1 = QFrame()
         self.bar1.setFixedHeight(25)
         self.bar1.setStyleSheet("background: #00ff00; border-radius: 3px;")
         bar1_container_layout.addWidget(self.bar1)
         bar1_container_layout.addStretch()
-        
         self.bar1_label = QLabel("0")
         self.bar1_label.setFixedWidth(40)
         self.bar1_label.setStyleSheet("color: white; font-weight: bold;")
-        
         bar1_layout.addWidget(self.bar1_container, 8)
         bar1_layout.addWidget(self.bar1_label, 1)
         chart_layout.addLayout(bar1_layout)
@@ -1072,23 +1073,19 @@ class ThreeBarChartWidget(QFrame):
         # Bar 2 - Original Plan
         bar2_layout = QHBoxLayout()
         bar2_layout.addWidget(QLabel("AI Plan"), 1)
-        
         self.bar2_container = QWidget()
         self.bar2_container.setMinimumHeight(25)
         self.bar2_container.setStyleSheet("background: #2a2a2a; border-radius: 3px;")
         bar2_container_layout = QHBoxLayout(self.bar2_container)
         bar2_container_layout.setContentsMargins(0, 0, 0, 0)
-        
         self.bar2 = QFrame()
         self.bar2.setFixedHeight(25)
         self.bar2.setStyleSheet("background: #ffaa00; border-radius: 3px;")
         bar2_container_layout.addWidget(self.bar2)
         bar2_container_layout.addStretch()
-        
         self.bar2_label = QLabel("0")
         self.bar2_label.setFixedWidth(40)
         self.bar2_label.setStyleSheet("color: white; font-weight: bold;")
-        
         bar2_layout.addWidget(self.bar2_container, 8)
         bar2_layout.addWidget(self.bar2_label, 1)
         chart_layout.addLayout(bar2_layout)
@@ -1096,47 +1093,39 @@ class ThreeBarChartWidget(QFrame):
         # Bar 3 - Refined Plan
         bar3_layout = QHBoxLayout()
         bar3_layout.addWidget(QLabel("Refined"), 1)
-        
         self.bar3_container = QWidget()
         self.bar3_container.setMinimumHeight(25)
         self.bar3_container.setStyleSheet("background: #2a2a2a; border-radius: 3px;")
         bar3_container_layout = QHBoxLayout(self.bar3_container)
         bar3_container_layout.setContentsMargins(0, 0, 0, 0)
-        
         self.bar3 = QFrame()
         self.bar3.setFixedHeight(25)
         self.bar3.setStyleSheet("background: #00ffff; border-radius: 3px;")
         bar3_container_layout.addWidget(self.bar3)
         bar3_container_layout.addStretch()
-        
         self.bar3_label = QLabel("0")
         self.bar3_label.setFixedWidth(40)
         self.bar3_label.setStyleSheet("color: white; font-weight: bold;")
-        
         bar3_layout.addWidget(self.bar3_container, 8)
         bar3_layout.addWidget(self.bar3_label, 1)
         chart_layout.addLayout(bar3_layout)
         
-        # Bar 4 - Live Selection (optional)
+        # Bar 4 - Live Selection
         bar4_layout = QHBoxLayout()
         bar4_layout.addWidget(QLabel("Selection"), 1)
-        
         self.bar4_container = QWidget()
         self.bar4_container.setMinimumHeight(25)
         self.bar4_container.setStyleSheet("background: #2a2a2a; border-radius: 3px;")
         bar4_container_layout = QHBoxLayout(self.bar4_container)
         bar4_container_layout.setContentsMargins(0, 0, 0, 0)
-        
         self.bar4 = QFrame()
         self.bar4.setFixedHeight(25)
         self.bar4.setStyleSheet("background: #ffff00; border-radius: 3px;")
         bar4_container_layout.addWidget(self.bar4)
         bar4_container_layout.addStretch()
-        
         self.bar4_label = QLabel("0")
         self.bar4_label.setFixedWidth(40)
         self.bar4_label.setStyleSheet("color: white; font-weight: bold;")
-        
         bar4_layout.addWidget(self.bar4_container, 8)
         bar4_layout.addWidget(self.bar4_label, 1)
         chart_layout.addLayout(bar4_layout)
@@ -1149,10 +1138,9 @@ class ThreeBarChartWidget(QFrame):
         
         chart_layout.addStretch()
         layout.addWidget(chart_widget)
-        
         self.setLayout(layout)
     
-    def update_scores(self, current: int, original_projected: int = None, 
+    def update_scores(self, current: int, original_projected: int = None,
                      refined_projected: int = None, live_projected: int = None):
         self.current_score = current
         self.original_projected = original_projected
