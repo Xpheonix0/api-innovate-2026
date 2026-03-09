@@ -12,7 +12,7 @@ from typing import List, Optional
 from PySide6.QtWidgets import QMessageBox, QFileDialog
 
 from zengine.safety import CommandSafety
-from zengine.models import RiskLevel
+from zengine.models import RiskLevel, OptimizationTask
 
 
 class ScriptGenerator:
