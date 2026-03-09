@@ -12,10 +12,10 @@ from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QSplitter,
     QLabel, QPushButton, QGroupBox, QTabWidget, QScrollArea,
     QStackedWidget, QToolBox, QTextEdit, QMessageBox, QFileDialog,
-    QMenuBar, QMenu, QAction, QProgressBar
+    QMenuBar, QMenu, QProgressBar
 )
 from PySide6.QtCore import Qt, QTimer
-from PySide6.QtGui import QFont
+from PySide6.QtGui import QFont, QAction
 
 from zengine.config import ASI_API_KEY
 from zengine.analyzer import PureAIAnalyzer
