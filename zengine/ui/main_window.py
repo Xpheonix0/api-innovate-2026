@@ -6,7 +6,8 @@ import datetime
 import os
 import threading
 from typing import List, Optional
-
+from zengine.safety import CommandSafety
+from zengine.script import ScriptGenerator
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QSplitter,
     QLabel, QPushButton, QGroupBox, QTabWidget, QScrollArea,
@@ -971,8 +972,3 @@ class LiveRiskCalculator:
             "projected_score": min(100, base_score + gain),
             "confidence": round(confidence, 1)
         }
-
-
-# Import at the bottom to avoid circular imports
-from zengine.safety import CommandSafety
-from zengine.script import ScriptGenerator
