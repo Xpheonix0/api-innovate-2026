@@ -145,8 +145,9 @@ class OptimizationTask:
         
         # Store the command to use
         self.actual_command = self.safe_command if self.safe_command else self.original_command
-    def get_execution_command(self, safe_mode: bool = True) -> str:
-     if safe_mode:
+  
+def get_execution_command(self, safe_mode: bool = True) -> str:
+    if safe_mode:
         return self.safe_command or self.original_command
     return self.original_command
     
