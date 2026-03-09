@@ -145,12 +145,10 @@ class OptimizationTask:
         
         # Store the command to use
         self.actual_command = self.safe_command if self.safe_command else self.original_command
-
     def get_execution_command(self, safe_mode: bool = True) -> str:
-        """Get the command to execute, with safety applied if in safe mode"""
-        if safe_mode:
-            return self.safe_command
-        return self.original_command
+     if safe_mode:
+        return self.safe_command or self.original_command
+    return self.original_command
     
     def get_risk_badge(self) -> str:
         risk_badges = {
