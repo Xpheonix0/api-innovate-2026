@@ -153,7 +153,7 @@ class OptimizationTask:
 
     def get_risk_badge(self) -> str:
         risk_badges = {
-            RiskLevel.LOW: "SAFE",
+            RiskLevel.LOW: "LOW",
             RiskLevel.MEDIUM: "MEDIUM",
             RiskLevel.HIGH: "HIGH",
             RiskLevel.CRITICAL: "CRITICAL"
@@ -173,10 +173,10 @@ class OptimizationCategory:
         self.strategic_importance = strategic_importance
     
     def get_safe_tasks(self) -> List[OptimizationTask]:
-        return [t for t in self.tasks if t.risk == RiskLevel.LOW]
+        return [t for t in self.tasks if t.is_safe_command]
     
     def get_unsafe_tasks(self) -> List[OptimizationTask]:
-        return [t for t in self.tasks if t.risk != RiskLevel.LOW]
+        return [t for t in self.tasks if not t.is_safe_command]
     
     def copy(self):
         """Create a deep copy of the category and its tasks"""
