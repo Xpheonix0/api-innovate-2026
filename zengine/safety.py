@@ -83,7 +83,7 @@ class CommandSafety:
         for cmd_name, validator in cls.VALIDATION_REQUIRED.items():
             if cmd_name.lower() in command.lower():
                 if re.search(validator["pattern"], command, re.IGNORECASE):
-                    return True, "low" if validator["safe"] else "medium", validator["message"]
+                   return True, ("low" if validator["safe"] else "medium"), validator["message"]
                 else:
                     return False, "high", f"Unsafe {cmd_name} pattern"
         
