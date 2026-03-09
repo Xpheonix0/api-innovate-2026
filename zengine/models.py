@@ -124,24 +124,44 @@ class ConfidenceAssessment:
         self.raw_response = raw_response
 
 
-# Store the command to use
+class OptimizationTask:
+    def __init__(self, task_id, description, risk, command, category, 
+                 requires_reboot=False, impact_on_stability=0, reasoning="",
+                 is_safe=False):
+        self.id = task_id
+        self.description = description
+        self.risk = RiskLevel.from_value(risk)
+        self.original_command = command
+        self.category = category
+        self.requires_reboot = requires_reboot
+        self.impact_on_stability = impact_on_stability
+        self.reasoning = reasoning
+        self.is_safe = is_safe
+        
+        # Validate command safety
+        from zengine.safety import CommandSafety
+        self.is_safe_command, self.safety_risk, self.safety_reason = CommandSafety.is_command_safe(command)
+        self.safe_command = CommandSafety.get_safe_version(command) if not self.is_safe_command else command
+        
+        # Store the command to use
         self.actual_command = self.safe_command if self.safe_command else self.original_command
 
-    def get_execution_command(self, safe_mode: bool = True) -> str:                          
+    def get_execution_command(self, safe_mode: bool = True) -> str:
         if safe_mode:
             return self.safe_command or self.original_command
         return self.original_command
 
     def get_risk_badge(self) -> str:
-```
+        risk_badges = {
+            RiskLevel.LOW: "SAFE",
+            RiskLevel.MEDIUM: "MEDIUM",
+            RiskLevel.HIGH: "HIGH",
+            RiskLevel.CRITICAL: "CRITICAL"
+        }
+        return risk_badges.get(self.risk, "UNKNOWN")
 
-The whole `OptimizationTask` class should look like this structure:
-```
-class OptimizationTask:
-    def __init__(...)       ← 4 spaces
-    def get_execution_command(...)  
-    def get_risk_badge(...)        
-    def get_risk_color(...)         
+    def get_risk_color(self) -> str:
+        return self.risk.get_color()
 
 
 class OptimizationCategory:
