@@ -11,7 +11,7 @@ from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QSplitter,
     QLabel, QPushButton, QGroupBox, QTabWidget, QScrollArea,
     QStackedWidget, QToolBox, QTextEdit, QMessageBox, QFileDialog,
-    QMenuBar, QMenu, QAction
+    QMenuBar, QMenu, QAction, QProgressBar
 )
 from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QFont
