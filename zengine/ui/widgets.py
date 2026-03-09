@@ -12,7 +12,7 @@ from PySide6.QtGui import QFont
 
 from zengine.models import OptimizationTask, OptimizationCategory, StrategyOption
 from zengine.safety import CommandSafety, RiskLevel
-from zengine.script import LiveRiskCalculator, ScriptGenerator, ScriptRunner
+from zengine.script import ScriptGenerator, ScriptRunner, LiveRiskCalculator
 
 
 class ClickableTaskCard(QFrame):
