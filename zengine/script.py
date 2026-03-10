@@ -16,15 +16,26 @@ from zengine.models import RiskLevel, OptimizationTask
 
 
 # Real PowerShell commands mapped to common optimization categories
+# IMPORTANT: CPU command must NOT use Stop-Process -Force broadly —
+# it can kill the console host and crash the script mid-run.
 FALLBACK_COMMANDS = {
     "memory":   "Clear-RecycleBin -Force -ErrorAction SilentlyContinue; [System.GC]::Collect()",
-    "cpu":      "Get-Process | Where-Object {$_.CPU -gt 100} | Stop-Process -Force -ErrorAction SilentlyContinue",
+    "cpu":      (
+        "Get-Process | Where-Object {"
+        "$_.CPU -gt 100 -and "
+        "$_.Name -notmatch 'powershell|pwsh|explorer|svchost|lsass|csrss|winlogon|System|smss|wininit'"
+        "} | ForEach-Object { try { $_.Kill() } catch {} }"
+    ),
     "disk":     "Optimize-Volume -DriveLetter C -ReTrim -Verbose",
     "startup":  "Get-CimInstance Win32_StartupCommand | Select-Object Name, Command, Location | Format-Table",
     "network":  "ipconfig /flushdns; netsh winsock reset",
     "security": "Update-MpSignature -ErrorAction SilentlyContinue",
     "cache":    'Remove-Item -Path "$env:TEMP\\*" -Recurse -Force -ErrorAction SilentlyContinue',
-    "service":  "Get-Service | Where-Object {$_.StartType -eq 'Automatic' -and $_.Status -eq 'Stopped'} | Select-Object Name, DisplayName",
+    "service":  (
+        "Get-Service | Where-Object {"
+        "$_.StartType -eq 'Automatic' -and $_.Status -eq 'Stopped'"
+        "} | Select-Object Name, DisplayName | Format-Table"
+    ),
     "default":  "Write-Host 'Optimization task completed' -ForegroundColor Green"
 }
 
@@ -113,7 +124,6 @@ class ScriptGenerator:
             "$confirmation = Read-Host 'Continue? (y/N)'",
             "if ($confirmation -ne 'y') { exit 0 }",
             "",
-            # Proper PowerShell string — $ must NOT be escaped by Python
             '$logFile = "$env:TEMP\\Z-Engine_$(Get-Date -Format \'yyyyMMdd_HHmmss\').log"',
             "Start-Transcript -Path $logFile",
             "",
@@ -253,7 +263,7 @@ class ScriptRunner:
         if not os.path.exists(script_path):
             QMessageBox.critical(parent_widget, "Error", f"Script not found: {script_path}")
             return False
-        # Note: $ removed from blocklist — Windows temp paths legitimately contain it
+        # Note: $ intentionally excluded from blocklist — Windows temp paths contain it
         if any(c in script_path for c in [';', '&', '|', '`']):
             QMessageBox.critical(parent_widget, "Error", "Invalid script path contains dangerous characters")
             return False
