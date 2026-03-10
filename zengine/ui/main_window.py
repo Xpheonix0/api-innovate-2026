@@ -31,7 +31,7 @@ from zengine.workers import (
 from zengine.ui.widgets import (
     FlowIndicator, CleanGraphWidget, ThreeBarChartWidget,
     StrategyComparisonWidget, ScriptDiffWidget, ScriptPreviewWidget,
-    LiveRiskWidget, RiskDeltaWidget, CategoryWidget
+    LiveRiskWidget, CategoryWidget
 )
 from zengine.ui.dialogs import SystemDetailsDialog, ThoughtTraceWidget
 
@@ -503,8 +503,6 @@ class MainWindow(QMainWindow):
     
     def _display_original_plan(self):
         self._clear_tab_layout(self.original_tab_layout)
-        
-        # Small delay to ensure deletions are processed
         QTimer.singleShot(50, lambda: self._build_original_plan())
     
     def _build_original_plan(self):
@@ -570,7 +568,6 @@ class MainWindow(QMainWindow):
     def _regenerate_done(self, categories, projected, risk_reduction, improvements):
         if not categories:
             self.log_msg("Using refined version of original plan", "WARN")
-            # Create copies to avoid mutating original
             categories = []
             for cat in self.original_categories[:4]:
                 new_cat = cat.copy()
@@ -589,7 +586,6 @@ class MainWindow(QMainWindow):
             self.risk_reduction = risk_reduction or 20.0
             self.improvements = improvements or ["Optimized for safety"]
         
-        # Safely calculate gain
         gain = 0
         if self.metrics and self.metrics.overall_score is not None and self.refined_projected is not None:
             gain = self.refined_projected - self.metrics.overall_score
@@ -625,19 +621,9 @@ class MainWindow(QMainWindow):
     
     def _confidence_done(self, assessment):
         if assessment:
-            # Wrap with min(100, ...) to cap at 100
             self.confidence_score = min(100, assessment.confidence_score)
         else:
-            # Cap confidence at 100
             self.confidence_score = min(100, 85 + (self.risk_reduction / 2 if self.risk_reduction else 0))
-        
-        self.risk_delta.update_delta(
-            self.original_projected or 80,
-            self.refined_projected or 80,
-            self.risk_reduction or 0,
-            self.confidence_score,
-            self.improvements
-        )
         
         self.confidence_worker = None
         self._display_refined_plan()
@@ -646,8 +632,6 @@ class MainWindow(QMainWindow):
     
     def _display_refined_plan(self):
         self._clear_tab_layout(self.refined_tab_layout)
-        
-        # Small delay to ensure deletions are processed
         QTimer.singleShot(50, lambda: self._build_refined_plan())
     
     def _build_refined_plan(self):
@@ -708,15 +692,10 @@ class MainWindow(QMainWindow):
             self.status.setText(f"Selected {len(selected)} tasks (impact: +{impact})")
             
             is_refined = self.category_tabs.currentIndex() == 1
-            self.live_risk.setStyleSheet("""
-                QFrame {
-                    border: 2px solid %s;
-                    border-radius: 5px;
-                    background: %s;
-                    margin: 5px;
-                }
-            """ % ("#00ffff" if is_refined else "#ffaa00",
-                   "#001122" if is_refined else "#221100"))
+            if is_refined:
+                self.live_risk.set_color("#00ffff", "#001122")
+            else:
+                self.live_risk.set_color("#ffaa00", "#221100")
             self.live_risk.update_risk(selected, self.metrics.overall_score)
             
             if self.metrics:
@@ -746,7 +725,6 @@ class MainWindow(QMainWindow):
         
         try:
             if current_tab == 0:
-                # Original tab - safely navigate layout hierarchy
                 for i in range(self.original_tab_layout.count()):
                     item = self.original_tab_layout.itemAt(i)
                     if item and item.widget():
@@ -759,7 +737,6 @@ class MainWindow(QMainWindow):
                                     if isinstance(w, CategoryWidget):
                                         selected.extend(w.get_selected())
             else:
-                # Refined tab - safely navigate layout hierarchy
                 for i in range(self.refined_tab_layout.count()):
                     item = self.refined_tab_layout.itemAt(i)
                     if item and item.widget():
@@ -777,7 +754,6 @@ class MainWindow(QMainWindow):
         return selected
     
     def _simulate_strategies(self):
-        # Add this check at the very top
         if not self.snapshot or not self.metrics:
             QMessageBox.information(self, "Cannot Simulate", "Please scan and analyze the system first")
             return
