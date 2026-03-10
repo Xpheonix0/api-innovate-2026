@@ -100,8 +100,6 @@ class ClickableTaskCard(QFrame):
             refined_badge.setStyleSheet("background: #00ffff; color: black; font-weight: bold; padding: 2px 4px; border-radius: 3px;")
             meta.addWidget(refined_badge)
         
-     
-        
         meta.addStretch()
         details.addLayout(meta)
         layout.addLayout(details)
@@ -222,10 +220,10 @@ class LiveRiskWidget(QFrame):
         layout = QVBoxLayout()
         layout.setSpacing(8)
         
-        header = QLabel("⚡ Live Risk Analysis")
-        header.setFont(QFont("Arial", 10, QFont.Weight.Bold))
-        header.setStyleSheet("color: #ffaa00;")
-        layout.addWidget(header)
+        self.header = QLabel("⚡ Live Risk Analysis")
+        self.header.setFont(QFont("Arial", 10, QFont.Weight.Bold))
+        self.header.setStyleSheet("color: #ffaa00;")
+        layout.addWidget(self.header)
         
         meter_layout = QHBoxLayout()
         
@@ -283,6 +281,30 @@ class LiveRiskWidget(QFrame):
         
         layout.addLayout(grid)
         self.setLayout(layout)
+    
+    def set_color(self, color: str, bg: str):
+        """Change the widget's color scheme"""
+        self.setStyleSheet(f"""
+            QFrame {{
+                border: 2px solid {color};
+                border-radius: 5px;
+                background: {bg};
+                margin: 5px;
+            }}
+        """)
+        self.header.setStyleSheet(f"color: {color};")
+        self.risk_meter.setStyleSheet(f"""
+            QProgressBar {{
+                border: 1px solid {color};
+                border-radius: 3px;
+                text-align: center;
+                color: white;
+            }}
+            QProgressBar::chunk {{
+                background-color: #ff5500;
+                border-radius: 3px;
+            }}
+        """)
     
     def update_risk(self, tasks: list, base_score: int):
         self.current_tasks = tasks
