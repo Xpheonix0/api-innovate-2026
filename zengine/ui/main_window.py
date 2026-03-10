@@ -200,9 +200,6 @@ class MainWindow(QMainWindow):
         left_layout.setContentsMargins(5, 5, 5, 5)
         left_layout.setSpacing(8)
         
-        self.risk_delta = RiskDeltaWidget()
-        left_layout.addWidget(self.risk_delta)
-        
         self.live_risk = LiveRiskWidget()
         left_layout.addWidget(self.live_risk)
         
