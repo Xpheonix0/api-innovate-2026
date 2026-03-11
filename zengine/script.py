@@ -22,9 +22,9 @@ FALLBACK_COMMANDS = {
     "memory":   "Clear-RecycleBin -Force -ErrorAction SilentlyContinue; [System.GC]::Collect()",
     "cpu":      (
         "Get-Process | Where-Object {"
-        "$_.CPU -gt 100 -and "
-        "$_.Name -notmatch 'powershell|pwsh|explorer|svchost|lsass|csrss|winlogon|System|smss|wininit'"
-        "} | ForEach-Object { try { $_.Kill() } catch {} }"
+        " $_.CPU -gt 100 -and"
+        " $_.Name -notmatch 'powershell|pwsh|explorer|svchost|lsass|csrss|winlogon|System|smss|wininit'"
+        " } | ForEach-Object { try { $_.Kill() } catch {} }"
     ),
     "disk":     "Optimize-Volume -DriveLetter C -ReTrim -Verbose",
     "startup":  "Get-CimInstance Win32_StartupCommand | Select-Object Name, Command, Location | Format-Table",
@@ -33,8 +33,8 @@ FALLBACK_COMMANDS = {
     "cache":    'Remove-Item -Path "$env:TEMP\\*" -Recurse -Force -ErrorAction SilentlyContinue',
     "service":  (
         "Get-Service | Where-Object {"
-        "$_.StartType -eq 'Automatic' -and $_.Status -eq 'Stopped'"
-        "} | Select-Object Name, DisplayName | Format-Table"
+        " $_.StartType -eq 'Automatic' -and $_.Status -eq 'Stopped'"
+        " } | Select-Object Name, DisplayName | Format-Table"
     ),
     "default":  "Write-Host 'Optimization task completed' -ForegroundColor Green"
 }
@@ -76,6 +76,12 @@ def _is_valid_powershell_command(cmd: str) -> bool:
         '$env:', '$_', 'foreach', 'if (', 'param('
     ]
     return any(indicator in cmd for indicator in ps_indicators)
+
+
+def _safe_ps_string(text: str) -> str:
+    """Sanitize a string for safe embedding inside PowerShell single-quoted strings"""
+    # Escape single quotes by doubling them (PS convention)
+    return text.replace("'", "''")
 
 
 class ScriptGenerator:
@@ -144,9 +150,9 @@ class ScriptGenerator:
 
         for category, cat_tasks in categories.items():
             lines.append("")
-            lines.append(f"Write-Host 'Processing: {category}' -ForegroundColor Yellow")
+            lines.append("Write-Host 'Processing: " + _safe_ps_string(category) + "' -ForegroundColor Yellow")
             separator = "-" * (len(category) + 10)
-            lines.append(f"Write-Host '{separator}' -ForegroundColor Yellow")
+            lines.append("Write-Host '" + separator + "' -ForegroundColor Yellow")
 
             safe_tasks     = [t for t in cat_tasks if t.risk == RiskLevel.LOW]
             advanced_tasks = [t for t in cat_tasks if t.risk != RiskLevel.LOW]
@@ -178,20 +184,24 @@ class ScriptGenerator:
         lines.extend([
             "",
             "Stop-Transcript",
-            "Write-Host 'Script completed' -ForegroundColor Green"
+            "Write-Host 'Script completed. Press Enter to close.' -ForegroundColor Green",
+            "Read-Host"
         ])
 
         return '\n'.join(lines)
 
     @classmethod
     def _add_task_to_script(cls, lines: list, task: OptimizationTask, safe_mode: bool):
-        lines.append("")
-        lines.append(f"# {task.description}")
-        if task.reasoning:
-            lines.append(f"# Reasoning: {task.reasoning}")
-        lines.append(f"# Risk: {task.get_risk_badge()}")
-
+        desc       = _safe_ps_string(task.description)
         is_safe, cmd_risk, safety_note = CommandSafety.is_command_safe(task.original_command)
+        note       = _safe_ps_string(safety_note)
+
+        lines.append("")
+        lines.append("# " + task.description)
+        if task.reasoning:
+            lines.append("# Reasoning: " + task.reasoning)
+        lines.append("# Risk: " + task.get_risk_badge())
+
         cmd_to_use = task.get_execution_command(safe_mode)
         cmd_to_use = cmd_to_use.strip() if cmd_to_use else ""
 
@@ -201,33 +211,35 @@ class ScriptGenerator:
             lines.append("# Note: Using best-match command for this optimization")
 
         if not is_safe and safe_mode:
-            lines.append(f"# Command modified for safety: {safety_note}")
+            lines.append("# Command modified for safety: " + safety_note)
 
-        # $($_.Exception.Message) is the correct PS error variable inside catch {}
+        # Use plain string concatenation — NO f-strings with {{ }} here.
+        # f-string brace escaping breaks when task.description or cmd_to_use
+        # contains literal { } characters, producing malformed PowerShell.
         if cmd_risk in ["high", "critical"] and safe_mode:
-            lines.append(f"Write-Host '  {task.description} (High Risk)' -ForegroundColor Yellow")
-            lines.append(f"Write-Host '      {safety_note}' -ForegroundColor Yellow")
-            lines.append(f"$confirm = Read-Host '    Proceed with this high-risk operation? (y/N)'")
-            lines.append(f"if ($confirm -eq 'y') {{")
-            lines.append(f"    try {{")
-            lines.append(f"        {cmd_to_use}")
-            lines.append(f"        Write-Host '    Completed' -ForegroundColor Green")
-            lines.append(f"    }} catch {{")
-            lines.append(f'        Write-Host "    Failed: $($_.Exception.Message)" -ForegroundColor Red')
-            lines.append(f"        Write-Warning 'Error in {task.description}'")
-            lines.append(f"    }}")
-            lines.append(f"}} else {{")
-            lines.append(f"    Write-Host '    Skipped' -ForegroundColor Gray")
-            lines.append(f"}}")
+            lines.append("Write-Host '  " + desc + " (High Risk)' -ForegroundColor Yellow")
+            lines.append("Write-Host '      " + note + "' -ForegroundColor Yellow")
+            lines.append("$confirm = Read-Host '    Proceed with this high-risk operation? (y/N)'")
+            lines.append("if ($confirm -eq 'y') {")
+            lines.append("    try {")
+            lines.append("        " + cmd_to_use)
+            lines.append("        Write-Host '    Completed' -ForegroundColor Green")
+            lines.append("    } catch {")
+            lines.append('        Write-Host "    Failed: $($_.Exception.Message)" -ForegroundColor Red')
+            lines.append("        Write-Warning 'Error in " + desc + "'")
+            lines.append("    }")
+            lines.append("} else {")
+            lines.append("    Write-Host '    Skipped' -ForegroundColor Gray")
+            lines.append("}")
         else:
-            lines.append(f"Write-Host '  -> {task.description}' -ForegroundColor Gray")
-            lines.append(f"try {{")
-            lines.append(f"    {cmd_to_use}")
-            lines.append(f"    Write-Host '    Completed' -ForegroundColor Green")
-            lines.append(f"}} catch {{")
-            lines.append(f'    Write-Host "    Failed: $($_.Exception.Message)" -ForegroundColor Red')
-            lines.append(f"    Write-Warning 'Error in {task.description}'")
-            lines.append(f"}}")
+            lines.append("Write-Host '  -> " + desc + "' -ForegroundColor Gray")
+            lines.append("try {")
+            lines.append("    " + cmd_to_use)
+            lines.append("    Write-Host '    Completed' -ForegroundColor Green")
+            lines.append("} catch {")
+            lines.append('    Write-Host "    Failed: $($_.Exception.Message)" -ForegroundColor Red')
+            lines.append("    Write-Warning 'Error in " + desc + "'")
+            lines.append("}")
 
     @staticmethod
     def save_script(content: str, default_name: str = "Z-Engine_Optimization.ps1") -> Optional[str]:
@@ -281,12 +293,13 @@ class ScriptRunner:
             return False
 
         try:
+            # -NoExit keeps the elevated window open so all Read-Host prompts are visible
             subprocess.Popen([
                 "powershell.exe",
                 "-NoProfile",
                 "-ExecutionPolicy", "Bypass",
                 "-Command",
-                f'Start-Process powershell.exe -Verb RunAs -ArgumentList \'-NoProfile -ExecutionPolicy Bypass -File "{script_path}"\''
+                f'Start-Process powershell.exe -Verb RunAs -ArgumentList \'-NoProfile -ExecutionPolicy Bypass -NoExit -File "{script_path}"\''
             ])
             QMessageBox.information(
                 parent_widget,
