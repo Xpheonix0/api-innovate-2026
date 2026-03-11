@@ -68,6 +68,11 @@ def _is_valid_powershell_command(cmd: str) -> bool:
     if not cmd or len(cmd.strip()) < 3:
         return False
     cmd = cmd.strip()
+
+    # Reject AI-generated placeholders like <process_id>, <path>, <value>
+    if '<' in cmd or '>' in cmd:
+        return False
+
     ps_indicators = [
         '-', 'Get-', 'Set-', 'Remove-', 'Clear-', 'Start-', 'Stop-',
         'Write-', 'New-', 'Add-', 'Update-', 'Invoke-', 'Test-',
@@ -192,9 +197,9 @@ class ScriptGenerator:
 
     @classmethod
     def _add_task_to_script(cls, lines: list, task: OptimizationTask, safe_mode: bool):
-        desc       = _safe_ps_string(task.description)
+        desc = _safe_ps_string(task.description)
         is_safe, cmd_risk, safety_note = CommandSafety.is_command_safe(task.original_command)
-        note       = _safe_ps_string(safety_note)
+        note = _safe_ps_string(safety_note)
 
         lines.append("")
         lines.append("# " + task.description)
