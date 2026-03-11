@@ -39,6 +39,41 @@ FALLBACK_COMMANDS = {
     "default":  "Write-Host 'Optimization task completed' -ForegroundColor Green"
 }
 
+# Real PowerShell cmdlet noun prefixes — the AI invents fake ones like
+# Get-MemoryManagement, Optimize-CPUOptimization etc. that don't exist.
+# Only commands whose verb-noun matches this whitelist are considered valid.
+REAL_PS_CMDLETS = {
+    # Process / service
+    "Get-Process", "Stop-Process", "Start-Process", "Get-Service",
+    "Start-Service", "Stop-Service", "Set-Service", "Restart-Service",
+    # Volume / disk
+    "Optimize-Volume", "Get-Volume", "Get-Disk", "Get-Partition",
+    "Clear-RecycleBin", "Get-PSDrive",
+    # Scheduled tasks / startup
+    "Get-ScheduledTask", "Disable-ScheduledTask", "Enable-ScheduledTask",
+    "Get-CimInstance", "Get-WmiObject",
+    # Network
+    "Get-NetAdapter", "Get-NetIPAddress", "Clear-DnsClientCache",
+    "Set-NetAdapterAdvancedProperty",
+    # Security / defender
+    "Update-MpSignature", "Set-MpPreference", "Get-MpComputerStatus",
+    # File system
+    "Remove-Item", "Get-Item", "Set-Item", "Copy-Item", "Move-Item",
+    "Get-ChildItem", "New-Item",
+    # Registry
+    "Get-ItemProperty", "Set-ItemProperty", "Remove-ItemProperty",
+    "New-ItemProperty",
+    # Power
+    "powercfg",
+    # Output / misc
+    "Write-Host", "Write-Output", "Write-Warning",
+    "Start-Transcript", "Stop-Transcript",
+    "Restart-Computer", "Stop-Computer",
+    # Non-cmdlet executables that are valid
+    "ipconfig", "netsh", "sfc", "reg", "sc", "wmic", "bcdedit",
+    "defrag", "chkdsk",
+}
+
 
 def _get_fallback_command(description: str, category: str) -> str:
     """Return a real PowerShell command based on description/category keywords"""
@@ -64,28 +99,48 @@ def _get_fallback_command(description: str, category: str) -> str:
 
 
 def _is_valid_powershell_command(cmd: str) -> bool:
-    """Check if a string looks like a real PowerShell command"""
+    """
+    Check if a string is a real, executable PowerShell command.
+    Rejects:
+      - Empty / too short strings
+      - AI placeholder syntax:  <process_id>, <path> etc.
+      - Fake invented cmdlets:  Get-MemoryManagement, Optimize-CPUOptimization etc.
+    Accepts:
+      - Commands whose first token matches REAL_PS_CMDLETS
+      - Multi-statement pipelines whose first real token is whitelisted
+      - Known executables (ipconfig, netsh, sfc …)
+    """
     if not cmd or len(cmd.strip()) < 3:
         return False
+
     cmd = cmd.strip()
 
-    # Reject AI-generated placeholders like <process_id>, <path>, <value>
+    # Reject angle-bracket placeholders
     if '<' in cmd or '>' in cmd:
         return False
 
-    ps_indicators = [
-        '-', 'Get-', 'Set-', 'Remove-', 'Clear-', 'Start-', 'Stop-',
-        'Write-', 'New-', 'Add-', 'Update-', 'Invoke-', 'Test-',
-        'ipconfig', 'netsh', 'sfc', 'reg ', 'sc ', 'wmic', 'bcdedit',
-        'defrag', 'chkdsk', 'powercfg', 'Optimize-', 'Restart-',
-        '$env:', '$_', 'foreach', 'if (', 'param('
-    ]
-    return any(indicator in cmd for indicator in ps_indicators)
+    # Extract the first token (before any space, |, ;)
+    first_token = re.split(r'[\s|;]', cmd)[0].strip()
+
+    # Direct whitelist hit
+    if first_token in REAL_PS_CMDLETS:
+        return True
+
+    # Allow $-variable expressions and pipeline starters like [System.GC]::Collect()
+    if first_token.startswith('$') or first_token.startswith('['):
+        return True
+
+    # Allow anything that starts with a whitelisted cmdlet anywhere in the string
+    # (handles pipelines like "Get-Process | Where-Object …")
+    for cmdlet in REAL_PS_CMDLETS:
+        if cmd.startswith(cmdlet) or (' ' + cmdlet) in cmd or (';' + cmdlet) in cmd or ('; ' + cmdlet) in cmd:
+            return True
+
+    return False
 
 
 def _safe_ps_string(text: str) -> str:
     """Sanitize a string for safe embedding inside PowerShell single-quoted strings"""
-    # Escape single quotes by doubling them (PS convention)
     return text.replace("'", "''")
 
 
@@ -210,7 +265,7 @@ class ScriptGenerator:
         cmd_to_use = task.get_execution_command(safe_mode)
         cmd_to_use = cmd_to_use.strip() if cmd_to_use else ""
 
-        # Fall back to a real PS command if the AI returned a placeholder
+        # Fall back to a real PS command if the AI returned a fake/placeholder command
         if not _is_valid_powershell_command(cmd_to_use):
             cmd_to_use = _get_fallback_command(task.description, task.category)
             lines.append("# Note: Using best-match command for this optimization")
@@ -218,9 +273,8 @@ class ScriptGenerator:
         if not is_safe and safe_mode:
             lines.append("# Command modified for safety: " + safety_note)
 
-        # Use plain string concatenation — NO f-strings with {{ }} here.
-        # f-string brace escaping breaks when task.description or cmd_to_use
-        # contains literal { } characters, producing malformed PowerShell.
+        # Plain string concatenation only — no f-strings with {{ }} to avoid
+        # brace mismatch when description/cmd contains literal { } characters.
         if cmd_risk in ["high", "critical"] and safe_mode:
             lines.append("Write-Host '  " + desc + " (High Risk)' -ForegroundColor Yellow")
             lines.append("Write-Host '      " + note + "' -ForegroundColor Yellow")
