@@ -36,16 +36,21 @@ FALLBACK_COMMANDS = {
         " $_.StartType -eq 'Automatic' -and $_.Status -eq 'Stopped'"
         " } | Select-Object Name, DisplayName | Format-Table"
     ),
+    # wmic is removed in Windows 11 — use Get-CimInstance instead
+    "pagefile": (
+        "Get-CimInstance -ClassName Win32_PageFileUsage"
+        " | Select-Object Name, CurrentUsage, AllocatedBaseSize | Format-Table"
+    ),
     "default":  "Write-Host 'Optimization task completed' -ForegroundColor Green"
 }
 
-# Real PowerShell cmdlet noun prefixes — the AI invents fake ones like
-# Get-MemoryManagement, Optimize-CPUOptimization etc. that don't exist.
-# Only commands whose verb-noun matches this whitelist are considered valid.
+# Whitelist of real PowerShell cmdlets / executables.
+# The AI invents fake ones like Get-MemoryManagement, Optimize-CPUOptimization —
+# anything not starting with a token from this set gets replaced by a fallback.
 REAL_PS_CMDLETS = {
     # Process / service
-    "Get-Process", "Stop-Process", "Start-Process", "Get-Service",
-    "Start-Service", "Stop-Service", "Set-Service", "Restart-Service",
+    "Get-Process", "Stop-Process", "Start-Process",
+    "Get-Service", "Start-Service", "Stop-Service", "Set-Service", "Restart-Service",
     # Volume / disk
     "Optimize-Volume", "Get-Volume", "Get-Disk", "Get-Partition",
     "Clear-RecycleBin", "Get-PSDrive",
@@ -61,17 +66,15 @@ REAL_PS_CMDLETS = {
     "Remove-Item", "Get-Item", "Set-Item", "Copy-Item", "Move-Item",
     "Get-ChildItem", "New-Item",
     # Registry
-    "Get-ItemProperty", "Set-ItemProperty", "Remove-ItemProperty",
-    "New-ItemProperty",
+    "Get-ItemProperty", "Set-ItemProperty", "Remove-ItemProperty", "New-ItemProperty",
     # Power
     "powercfg",
     # Output / misc
     "Write-Host", "Write-Output", "Write-Warning",
     "Start-Transcript", "Stop-Transcript",
     "Restart-Computer", "Stop-Computer",
-    # Non-cmdlet executables that are valid
-    "ipconfig", "netsh", "sfc", "reg", "sc", "wmic", "bcdedit",
-    "defrag", "chkdsk",
+    # Non-cmdlet executables (wmic intentionally excluded — removed in Win 11)
+    "ipconfig", "netsh", "sfc", "reg", "sc", "bcdedit", "defrag", "chkdsk",
 }
 
 
@@ -82,11 +85,11 @@ def _get_fallback_command(description: str, category: str) -> str:
         return FALLBACK_COMMANDS["memory"]
     elif any(k in text for k in ["cpu", "process", "processor"]):
         return FALLBACK_COMMANDS["cpu"]
-    elif any(k in text for k in ["disk", "drive", "storage", "volume", "defrag"]):
+    elif any(k in text for k in ["disk", "drive", "storage", "volume", "defrag", "trim", "ssd"]):
         return FALLBACK_COMMANDS["disk"]
     elif any(k in text for k in ["startup", "boot", "autostart"]):
         return FALLBACK_COMMANDS["startup"]
-    elif any(k in text for k in ["network", "dns", "socket", "winsock"]):
+    elif any(k in text for k in ["network", "dns", "socket", "winsock", "nagle", "latency"]):
         return FALLBACK_COMMANDS["network"]
     elif any(k in text for k in ["security", "defender", "antivirus", "firewall"]):
         return FALLBACK_COMMANDS["security"]
@@ -94,6 +97,8 @@ def _get_fallback_command(description: str, category: str) -> str:
         return FALLBACK_COMMANDS["cache"]
     elif any(k in text for k in ["service", "services"]):
         return FALLBACK_COMMANDS["service"]
+    elif any(k in text for k in ["virtual", "page", "pagefile", "swap"]):
+        return FALLBACK_COMMANDS["pagefile"]
     else:
         return FALLBACK_COMMANDS["default"]
 
@@ -102,13 +107,14 @@ def _is_valid_powershell_command(cmd: str) -> bool:
     """
     Check if a string is a real, executable PowerShell command.
     Rejects:
-      - Empty / too short strings
-      - AI placeholder syntax:  <process_id>, <path> etc.
-      - Fake invented cmdlets:  Get-MemoryManagement, Optimize-CPUOptimization etc.
+      - Empty / too-short strings
+      - AI placeholder syntax: <process_id>, <path> etc.
+      - Fake invented cmdlets: Get-MemoryManagement, Optimize-CPUOptimization etc.
+      - wmic (removed from Windows 11)
     Accepts:
       - Commands whose first token matches REAL_PS_CMDLETS
       - Multi-statement pipelines whose first real token is whitelisted
-      - Known executables (ipconfig, netsh, sfc …)
+      - $variable and [Type]::method() expressions
     """
     if not cmd or len(cmd.strip()) < 3:
         return False
@@ -119,6 +125,10 @@ def _is_valid_powershell_command(cmd: str) -> bool:
     if '<' in cmd or '>' in cmd:
         return False
 
+    # Explicitly reject wmic — not available on Windows 11
+    if cmd.lower().startswith('wmic'):
+        return False
+
     # Extract the first token (before any space, |, ;)
     first_token = re.split(r'[\s|;]', cmd)[0].strip()
 
@@ -126,14 +136,16 @@ def _is_valid_powershell_command(cmd: str) -> bool:
     if first_token in REAL_PS_CMDLETS:
         return True
 
-    # Allow $-variable expressions and pipeline starters like [System.GC]::Collect()
+    # Allow $-variable expressions and [Type]::method() calls
     if first_token.startswith('$') or first_token.startswith('['):
         return True
 
-    # Allow anything that starts with a whitelisted cmdlet anywhere in the string
-    # (handles pipelines like "Get-Process | Where-Object …")
+    # Allow pipelines that contain a whitelisted cmdlet anywhere
     for cmdlet in REAL_PS_CMDLETS:
-        if cmd.startswith(cmdlet) or (' ' + cmdlet) in cmd or (';' + cmdlet) in cmd or ('; ' + cmdlet) in cmd:
+        if (cmd.startswith(cmdlet)
+                or (' ' + cmdlet) in cmd
+                or (';' + cmdlet) in cmd
+                or ('; ' + cmdlet) in cmd):
             return True
 
     return False
@@ -234,11 +246,8 @@ class ScriptGenerator:
             lines.extend([
                 "",
                 "Write-Host ''",
-                "Write-Host 'Some changes require a reboot' -ForegroundColor Yellow",
-                "$reboot = Read-Host 'Reboot now? (y/N)'",
-                "if ($reboot -eq 'y') {",
-                "    Restart-Computer -Force",
-                "}"
+                "Write-Host 'Some optimizations work best after a reboot.' -ForegroundColor Yellow",
+                "Write-Host 'You can reboot manually when ready.' -ForegroundColor Yellow",
             ])
 
         lines.extend([
